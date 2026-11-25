@@ -1,0 +1,8 @@
+{
+  "rules": {
+    "isg": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    }
+  }
+}

@@ -465,26 +465,28 @@ const DEFAULT_STALKERS = [
     { id: 3, callsign: "КРОТ", rank: "3", status: "ПРОПАЛ", birthDate: "1982-11-08", note: "Поиск ведётся.", photo: "" }
 ];
 
+const DEFAULT_STALKER_TASKS = [];
+
 const DEFAULT_TRUSTED = [
     { id: 1, callsign: "ПРИЗРАК", status: "АКТИВЕН", birthDate: "1975-05-30", note: "Высший уровень доверия.", photo: "" },
     { id: 2, callsign: "ДОК", status: "АКТИВЕН", birthDate: "1980-09-12", note: "Полевой хирург.", photo: "" }
 ];
 
 const DEFAULT_BUY = [
-    { id: 1, item: "Аномальный кристалл (3 ед.)", price: "4500 у.е." },
-    { id: 2, item: "Документация объекта «Купол»", price: "8000 у.е." },
-    { id: 3, item: "Контейнер с образцами почвы", price: "1200 у.е." },
-    { id: 4, item: "Контейнер «Глаз»", price: "15000 у.е." }
+    { id: 1, item: "Аномальный кристалл (3 ед.)", price: "4500 руб." },
+    { id: 2, item: "Документация объекта «Купол»", price: "8000 руб." },
+    { id: 3, item: "Контейнер с образцами почвы", price: "1200 руб." },
+    { id: 4, item: "Контейнер «Глаз»", price: "15000 руб." }
 ];
 
 const DEFAULT_SELL = [
-    { id: 1, item: "Карта Сектора-4 (полная)", price: "6000 у.е.", group: "Информация" },
-    { id: 2, item: "Консультация аномалиста", price: "2500 у.е.", group: "Услуги" },
-    { id: 3, item: "Защищённый коммуникатор", price: "3800 у.е.", group: "Снаряжение" },
-    { id: 4, item: "Аптечка научная", price: "900 у.е.", group: "Медикаменты" },
-    { id: 5, item: "Артефакт «Пустышка»", price: "22000 у.е.", group: "Артефакты" },
-    { id: 6, item: "Детектор аномалий", price: "12000 у.е.", group: "Снаряжение" },
-    { id: 7, item: "Анализ артефакта", price: "5000 у.е.", group: "Услуги" }
+    { id: 1, item: "Карта Сектора-4 (полная)", price: "6000 руб.", group: "Информация" },
+    { id: 2, item: "Консультация аномалиста", price: "2500 руб.", group: "Услуги" },
+    { id: 3, item: "Защищённый коммуникатор", price: "3800 руб.", group: "Снаряжение" },
+    { id: 4, item: "Аптечка научная", price: "900 руб.", group: "Медикаменты" },
+    { id: 5, item: "Артефакт «Пустышка»", price: "22000 руб.", group: "Артефакты" },
+    { id: 6, item: "Детектор аномалий", price: "12000 руб.", group: "Снаряжение" },
+    { id: 7, item: "Анализ артефакта", price: "5000 руб.", group: "Услуги" }
 ];
 
 const DEFAULT_ARTIFACTS = [
@@ -536,6 +538,7 @@ const DEFAULT_TABS = [
     { id: "home", label: "ГЛАВНАЯ", minRole: "guest" },
     { id: "agents", label: "АГЕНТЫ", minRole: "boets" },
     { id: "stalkers", label: "СТАЛКЕРЫ", minRole: "boets" },
+    { id: "stalkerTasks", label: "ЗАДАНИЯ СТАЛКЕРОВ", minRole: "boets" },
     { id: "trusted", label: "ДОВЕРЕННЫЕ", minRole: "boets" },
     { id: "artifacts", label: "АРТЕФАКТЫ", minRole: "boets" },
     { id: "buy", label: "СКУПКА", minRole: "boets" },
@@ -556,7 +559,7 @@ const ROOT_PATH = "isg";
 // Реальные права доступа задаются Firebase Authentication + Database Rules,
 // проверки ролей в HTML нужны только для отображения интерфейса.
 const STORAGE = {
-    tabs: "tabs", fighters: "fighters", stalkers: "stalkers",
+    tabs: "tabs", fighters: "fighters", stalkers: "stalkers", stalkerTasks: "stalkerTasks",
     trusted: "trusted", artifacts: "artifacts", buy: "buy",
     sell: "sell", reports: "reports", session: "isg_session"
 };
@@ -567,6 +570,7 @@ let dbWriteQueue = Promise.resolve();
 let tabs = JSON.parse(JSON.stringify(DEFAULT_TABS));
 let fighters = JSON.parse(JSON.stringify(DEFAULT_FIGHTERS));
 let stalkers = JSON.parse(JSON.stringify(DEFAULT_STALKERS));
+let stalkerTasks = JSON.parse(JSON.stringify(DEFAULT_STALKER_TASKS));
 let trusted = JSON.parse(JSON.stringify(DEFAULT_TRUSTED));
 let artifacts = JSON.parse(JSON.stringify(DEFAULT_ARTIFACTS));
 let buy = JSON.parse(JSON.stringify(DEFAULT_BUY));
@@ -607,7 +611,7 @@ function setConnectionStatus(label, cssClass) {
     if (node) { node.textContent = label; node.className = cssClass || ""; }
 }
 const FIREBASE_DEFAULTS = {
-    tabs: DEFAULT_TABS, fighters: DEFAULT_FIGHTERS, stalkers: DEFAULT_STALKERS,
+    tabs: DEFAULT_TABS, fighters: DEFAULT_FIGHTERS, stalkers: DEFAULT_STALKERS, stalkerTasks: DEFAULT_STALKER_TASKS,
     trusted: DEFAULT_TRUSTED, artifacts: DEFAULT_ARTIFACTS, buy: DEFAULT_BUY,
     sell: DEFAULT_SELL, reports: DEFAULT_REPORTS
 };
@@ -621,10 +625,11 @@ const STATE_SETTERS = {
             ? String(s.status).toUpperCase()
             : "АКТИВЕН"
     })),
+    stalkerTasks: v => stalkerTasks = normalizeList(v),
     trusted: v => trusted = normalizeList(v),
     artifacts: v => artifacts = normalizeList(v),
-    buy: v => buy = normalizeList(v),
-    sell: v => sell = normalizeList(v),
+    buy: v => buy = normalizeList(v).map(x => ({ ...x, price: String(x.price || "").replace(/у\.е\.?/gi, "руб.") })),
+    sell: v => sell = normalizeList(v).map(x => ({ ...x, price: String(x.price || "").replace(/у\.е\.?/gi, "руб.") })),
     reports: v => reports = normalizeList(v)
 };
 
@@ -647,6 +652,12 @@ async function initFirebase() {
                     STATE_SETTERS[key](FIREBASE_DEFAULTS[key]);
                 } else STATE_SETTERS[key](root[key]);
             }
+        }
+
+        if (!tabs.some(t => t.id === "stalkerTasks")) {
+            const stalkersIndex = tabs.findIndex(t => t.id === "stalkers");
+            tabs.splice(stalkersIndex >= 0 ? stalkersIndex + 1 : tabs.length, 0, { id: "stalkerTasks", label: "ЗАДАНИЯ СТАЛКЕРОВ", minRole: "boets" });
+            await db.ref(`${ROOT_PATH}/tabs`).set(tabs);
         }
 
         Object.keys(FIREBASE_DEFAULTS).forEach(key => {
@@ -765,6 +776,7 @@ function renderTabContent(id) {
         case "home": return renderHome();
         case "agents": return renderAgents();
         case "stalkers": return renderStalkers();
+        case "stalkerTasks": return renderStalkerTasks();
         case "trusted": return renderTrusted();
         case "artifacts": return renderArtifacts();
         case "buy": return renderBuy();
@@ -859,10 +871,22 @@ function renderStalkersTable(list) {
     let html = `<table><tr><th>ФОТО</th><th>ПОЗЫВНОЙ</th><th>РАНГ</th><th>СТАТУС</th><th>ДАТА РОЖД.</th><th>ПОМЕТКА</th>${actions?'<th>ДЕЙСТВИЕ</th>':''}</tr>`;
     list.forEach(e => {
         const photo = e.photo ? `<img src="${e.photo}" class="photo-thumb" onclick="openPhoto('${escapeHtml(e.photo)}','${escapeHtml(e.callsign)}')">` : '<span class="text-warn">—</span>';
-        html += `<tr><td>${photo}</td><td>${escapeHtml(e.callsign)}</td><td>${escapeHtml(e.rank)}</td><td>${escapeHtml(e.status)}</td><td>${e.birthDate||'—'}</td><td>${escapeHtml(e.note)}</td>${actions?`<td><button class="btn warn small" onclick="editStalker(${e.id})">✎</button> <button class="btn danger small" onclick="deleteStalker(${e.id})">×</button></td>`:''}</tr>`;
+        const rankCell = actions
+            ? `<select class="stalker-rank-select" aria-label="Ранг сталкера" onchange="updateStalkerRank(${e.id}, this.value)">${[1,2,3,4,5].map(rank => `<option value="${rank}" ${String(e.rank)===String(rank)?'selected':''}>${rank}</option>`).join('')}</select>`
+            : escapeHtml(e.rank);
+        html += `<tr><td>${photo}</td><td>${escapeHtml(e.callsign)}</td><td>${rankCell}</td><td>${escapeHtml(e.status)}</td><td>${e.birthDate||'—'}</td><td>${escapeHtml(e.note)}</td>${actions?`<td><button class="btn warn small" onclick="editStalker(${e.id})">✎</button> <button class="btn danger small" onclick="deleteStalker(${e.id})">×</button></td>`:''}</tr>`;
     });
     html += `</table>`;
     return html;
+}
+
+function updateStalkerRank(id, value) {
+    if (!canEditEntries()) return;
+    if (!/^[1-5]$/.test(String(value))) return;
+    const stalker = stalkers.find(item => item.id === id);
+    if (!stalker) return;
+    stalker.rank = String(value);
+    save(STORAGE.stalkers, stalkers);
 }
 
 function filterStalkers() {
@@ -930,6 +954,56 @@ function deleteStalker(id) {
     if (!confirm("Удалить сталкера?")) return;
     stalkers = stalkers.filter(e => e.id !== id);
     save(STORAGE.stalkers, stalkers); renderContent();
+}
+
+function renderStalkerTasks() {
+    let html = `<h1>&gt; ЗАДАНИЯ ДЛЯ СТАЛКЕРОВ_</h1>
+<p class="text-warn" style="font-size:12px;">// Выданные задания, сроки сдачи и награды.</p>`;
+    if (!stalkerTasks.length) html += `<p class="text-warn">// Заданий пока нет</p>`;
+    else {
+        const actions = canEditEntries();
+        html += `<table><tr><th>ПОЗЫВНОЙ</th><th>ВЫДАННОЕ ЗАДАНИЕ</th><th>ДАТА ВЫДАЧИ</th><th>СДАТЬ ДО</th><th>НАГРАДА</th>${actions ? '<th>ДЕЙСТВИЕ</th>' : ''}</tr>`;
+        stalkerTasks.forEach(task => {
+            html += `<tr><td>${escapeHtml(task.callsign || '—')}</td><td>${escapeHtml(task.description || '')}</td><td>${escapeHtml(task.issueDate || '—')}</td><td>${escapeHtml(task.dueDate || '—')}</td><td>${escapeHtml(task.reward || '—')}</td>${actions ? `<td><button class="btn warn small" onclick="editStalkerTask(${task.id})">✎</button> <button class="btn danger small" onclick="deleteStalkerTask(${task.id})">×</button></td>` : ''}</tr>`;
+        });
+        html += `</table>`;
+    }
+    if (canEditEntries()) {
+        const options = stalkers.map(st => `<option value="${escapeHtml(st.callsign)}">${escapeHtml(st.callsign)}</option>`).join('');
+        html += `<div class="form-block mt-10"><h3>[ ВЫДАТЬ ЗАДАНИЕ ]</h3><form onsubmit="addStalkerTask(event)">
+        <div class="row"><div style="flex:1;min-width:150px;"><label>ПОЗЫВНОЙ:</label><select id="taskCallsign" required>${options || '<option value="">Сначала добавьте сталкера</option>'}</select></div>
+        <div style="flex:2;min-width:220px;"><label>ЗАДАНИЕ:</label><input type="text" id="taskDescription" required></div></div>
+        <div class="row"><div style="flex:1;min-width:150px;"><label>ДАТА ВЫДАЧИ:</label><input type="date" id="taskIssueDate" required></div>
+        <div style="flex:1;min-width:150px;"><label>СДАТЬ ДО:</label><input type="date" id="taskDueDate" required></div>
+        <div style="flex:1;min-width:150px;"><label>НАГРАДА:</label><input type="text" id="taskReward" required placeholder="Например: 5000 руб."></div></div>
+        <button type="submit" class="btn small" ${stalkers.length ? '' : 'disabled'}>+ ВЫДАТЬ ЗАДАНИЕ</button></form></div>`;
+    }
+    return html;
+}
+
+function addStalkerTask(e) {
+    e.preventDefault(); if (!canEditEntries()) return;
+    const id = stalkerTasks.length ? Math.max(...stalkerTasks.map(x => Number(x.id) || 0)) + 1 : 1;
+    stalkerTasks.push({ id, callsign: document.getElementById('taskCallsign').value, description: document.getElementById('taskDescription').value.trim(), issueDate: document.getElementById('taskIssueDate').value, dueDate: document.getElementById('taskDueDate').value, reward: document.getElementById('taskReward').value.trim() });
+    save(STORAGE.stalkerTasks, stalkerTasks); renderContent();
+}
+
+function editStalkerTask(id) {
+    if (!canEditEntries()) return;
+    const task = stalkerTasks.find(x => x.id === id); if (!task) return;
+    const callsign = prompt('Позывной:', task.callsign); if (callsign === null) return;
+    const description = prompt('Задание:', task.description); if (description === null) return;
+    const issueDate = prompt('Дата выдачи (ГГГГ-ММ-ДД):', task.issueDate); if (issueDate === null) return;
+    const dueDate = prompt('Сдать до (ГГГГ-ММ-ДД):', task.dueDate); if (dueDate === null) return;
+    const reward = prompt('Награда:', task.reward); if (reward === null) return;
+    Object.assign(task, { callsign: callsign.trim(), description: description.trim(), issueDate: issueDate.trim(), dueDate: dueDate.trim(), reward: reward.trim() });
+    save(STORAGE.stalkerTasks, stalkerTasks); renderContent();
+}
+
+function deleteStalkerTask(id) {
+    if (!canEditEntries() || !confirm('Удалить задание?')) return;
+    stalkerTasks = stalkerTasks.filter(x => x.id !== id);
+    save(STORAGE.stalkerTasks, stalkerTasks); renderContent();
 }
 
 function renderTrusted() {
@@ -1243,9 +1317,9 @@ function renderBuyCalculator() {
         <span class="percent-info">// Процент удержания группы от суммы сделки</span>
     </div>
     <div class="calc-total" id="buyCalcTotal">
-        <div class="total-line"><span>СУММА:</span><span>0 у.е.</span></div>
-        <div class="total-line sub"><span>КОМИССИЯ (0%):</span><span>−0 у.е.</span></div>
-        <div class="total-line final"><span>К ВЫПЛАТЕ:</span><span>0 у.е.</span></div>
+        <div class="total-line"><span>СУММА:</span><span>0 руб.</span></div>
+        <div class="total-line sub"><span>КОМИССИЯ (0%):</span><span>−0 руб.</span></div>
+        <div class="total-line final"><span>К ВЫПЛАТЕ:</span><span>0 руб.</span></div>
     </div>
     <button class="btn danger small" onclick="clearBuyCalc()" style="margin-top:10px;">ОЧИСТИТЬ</button>
 </div>`;
@@ -1266,7 +1340,7 @@ function addBuyCalcItem() {
     div.innerHTML = `
         <select onchange="updateBuyCalc()">${options}</select>
         <input type="number" min="1" value="1" onchange="updateBuyCalc()" oninput="updateBuyCalc()" placeholder="Кол-во">
-        <div class="item-price">0 у.е.</div>
+        <div class="item-price">0 руб.</div>
         <button class="btn danger small" onclick="removeBuyCalcItem(${buyCalcCounter})">×</button>`;
     container.appendChild(div);
     updateBuyCalc();
@@ -1289,7 +1363,7 @@ function updateBuyCalc() {
         const qty = parseInt(qtyInput.value) || 0;
         const price = parseFloat(priceText.replace(/[^0-9.]/g, '')) || 0;
         const itemTotal = price * qty;
-        priceDiv.textContent = `${itemTotal} у.е.`;
+        priceDiv.textContent = `${itemTotal} руб.`;
         subtotal += itemTotal;
     });
     const percentInput = document.getElementById("buyCalcPercent");
@@ -1299,9 +1373,9 @@ function updateBuyCalc() {
     const totalDiv = document.getElementById("buyCalcTotal");
     if (totalDiv) {
         totalDiv.innerHTML = `
-            <div class="total-line"><span>СУММА:</span><span>${subtotal} у.е.</span></div>
-            <div class="total-line sub"><span>КОМИССИЯ (${percent}%):</span><span>−${commission.toFixed(2)} у.е.</span></div>
-            <div class="total-line final"><span>К ВЫПЛАТЕ:</span><span>${payout.toFixed(2)} у.е.</span></div>`;
+            <div class="total-line"><span>СУММА:</span><span>${subtotal} руб.</span></div>
+            <div class="total-line sub"><span>КОМИССИЯ (${percent}%):</span><span>−${commission.toFixed(2)} руб.</span></div>
+            <div class="total-line final"><span>К ВЫПЛАТЕ:</span><span>${payout.toFixed(2)} руб.</span></div>`;
     }
 }
 
@@ -1410,7 +1484,7 @@ function renderSellCalculator() {
     <div id="sellCalcItems"></div>
     <button class="btn small" onclick="addSellCalcItem()" style="margin-bottom:15px;">+ ДОБАВИТЬ ПОЗИЦИЮ</button>
     <div class="calc-total" id="sellCalcTotal">
-        <div class="total-line final"><span>ИТОГО К ОПЛАТЕ:</span><span>0 у.е.</span></div>
+        <div class="total-line final"><span>ИТОГО К ОПЛАТЕ:</span><span>0 руб.</span></div>
     </div>
     <button class="btn danger small" onclick="clearSellCalc()" style="margin-top:10px;">ОЧИСТИТЬ</button>
 </div>`;
@@ -1431,7 +1505,7 @@ function addSellCalcItem() {
     div.innerHTML = `
         <select onchange="updateSellCalc()">${options}</select>
         <input type="number" min="1" value="1" onchange="updateSellCalc()" oninput="updateSellCalc()" placeholder="Кол-во">
-        <div class="item-price">0 у.е.</div>
+        <div class="item-price">0 руб.</div>
         <button class="btn danger small" onclick="removeSellCalcItem(${sellCalcCounter})">×</button>`;
     container.appendChild(div);
     updateSellCalc();
@@ -1454,13 +1528,13 @@ function updateSellCalc() {
         const qty = parseInt(qtyInput.value) || 0;
         const price = parseFloat(priceText.replace(/[^0-9.]/g, '')) || 0;
         const itemTotal = price * qty;
-        priceDiv.textContent = `${itemTotal} у.е.`;
+        priceDiv.textContent = `${itemTotal} руб.`;
         subtotal += itemTotal;
     });
     const totalDiv = document.getElementById("sellCalcTotal");
     if (totalDiv) {
         totalDiv.innerHTML = `
-            <div class="total-line final"><span>ИТОГО К ОПЛАТЕ:</span><span>${subtotal.toFixed(2)} у.е.</span></div>`;
+            <div class="total-line final"><span>ИТОГО К ОПЛАТЕ:</span><span>${subtotal.toFixed(2)} руб.</span></div>`;
     }
 }
 

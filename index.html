@@ -444,6 +444,16 @@ tr:hover td { background: rgba(0,255,65,0.05); }
             <button type="submit" class="btn small">+ ДОБАВИТЬ ВКЛАДКУ</button>
         </form>
         <hr style="border-color:#ffb000;margin:20px 0;">
+        <h3 style="color:#ffb000;">[ DISCORD WEBHOOK — ОТЧЁТЫ ]</h3>
+        <form onsubmit="saveDiscordWebhook(event)" class="mt-10">
+            <label>URL WEBHOOK DISCORD:</label>
+            <input type="password" id="discordWebhookInput" placeholder="https://discord.com/api/webhooks/..." autocomplete="off">
+            <p class="text-warn" style="font-size:11px;">При публикации нового отчёта бот отправит его в указанный Discord-канал. URL вебхука хранится в Firebase и доступен клиентскому коду сайта — для закрытого проекта лучше использовать серверную функцию.</p>
+            <button type="submit" class="btn small">СОХРАНИТЬ WEBHOOK</button>
+            <button type="button" class="btn danger small" onclick="clearDiscordWebhook()">УДАЛИТЬ WEBHOOK</button>
+            <span id="discordWebhookStatus" style="font-size:11px;margin-left:8px;"></span>
+        </form>
+        <hr style="border-color:#ffb000;margin:16px 0;">
         <h3 style="color:#ffb000;">[ УПРАВЛЕНИЕ ОТЧЁТАМИ ]</h3>
         <div id="adminReportsList"></div>
         <hr style="border-color:#ffb000;margin:20px 0;">
@@ -592,6 +602,7 @@ let session = loadSession();
 let activeTab = "home";
 let councilPresenceRef = null;
 let councilPresenceCount = 0;
+let discordWebhookUrl = "";
 
 function loadSession() {
     try { return JSON.parse(localStorage.getItem(STORAGE.session) || "null"); }
@@ -682,6 +693,13 @@ async function initFirebase() {
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         await firebase.auth().signInAnonymously();
         db = firebase.database();
+        db.ref(`${ROOT_PATH}/settings/discordWebhookUrl`).on("value", snapshot => {
+            discordWebhookUrl = String(snapshot.val() || "");
+            const field = document.getElementById("discordWebhookInput");
+            if (field && document.activeElement !== field) field.value = discordWebhookUrl;
+            const status = document.getElementById("discordWebhookStatus");
+            if (status) status.textContent = discordWebhookUrl ? "WEBHOOK НАСТРОЕН" : "WEBHOOK НЕ ЗАДАН";
+        }, error => console.warn("Discord webhook setting listener:", error));
         councilPresenceRef = db.ref(`${ROOT_PATH}/councilPresence`).push();
         db.ref(`${ROOT_PATH}/councilPresence`).on("value", snapshot => {
             councilPresenceCount = snapshot.exists() ? Object.keys(snapshot.val() || {}).length : 0;
@@ -1856,8 +1874,75 @@ function addReport(e) {
     const newId = reports.length ? Math.max(...reports.map(x=>x.id))+1 : 1;
     // Боец всегда публикует отчёт только для бойцов; выбрать доступ Совета может только Совет.
     const access = isSovet() ? document.getElementById("repAccess").value : "boets";
-    reports.push({ id: newId, title: document.getElementById("repTitle").value.trim(), author: session.callsign, role: session.role, access, date: new Date().toISOString().slice(0,10), text: document.getElementById("repText").value.trim() });
+    const newReport = { id: newId, title: document.getElementById("repTitle").value.trim(), author: session.callsign, role: session.role, access, date: new Date().toISOString().slice(0,10), text: document.getElementById("repText").value.trim() };
+    reports.push(newReport);
     save(STORAGE.reports, reports); renderContent();
+    sendReportToDiscord(newReport);
+}
+
+async function sendReportToDiscord(report) {
+    const webhook = String(discordWebhookUrl || "").trim();
+    if (!webhook) return;
+    if (!/^https:\/\/(discord\.com|discordapp\.com)\/api\/webhooks\/\d+\/[^\s]+$/i.test(webhook)) {
+        console.warn("Discord webhook URL is not valid.");
+        return;
+    }
+    const safe = value => String(value || "").replace(/@/g, "@\u200b");
+    const payload = {
+        username: "ISG · Отчёты",
+        allowed_mentions: { parse: [] },
+        embeds: [{
+            title: safe(report.title).slice(0, 256),
+            description: safe(report.text).slice(0, 4000),
+            color: report.access === "sovet" ? 16755200 : 65280,
+            fields: [
+                { name: "Автор", value: safe(report.author).slice(0, 1024), inline: true },
+                { name: "Доступ", value: safe(String(report.access || "").toUpperCase()), inline: true },
+                { name: "Дата", value: safe(report.date), inline: true },
+                { name: "ID отчёта", value: String(report.id), inline: true }
+            ],
+            footer: { text: "ISG · Лента отчётов" },
+            timestamp: new Date().toISOString()
+        }]
+    };
+    try {
+        const response = await fetch(webhook, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) throw new Error(`Discord HTTP ${response.status}`);
+        console.info("Report delivered to Discord webhook.");
+    } catch (error) {
+        console.error("Discord webhook delivery failed:", error);
+        alert("Отчёт сохранён на сайте, но отправить его в Discord не удалось. Проверьте webhook и доступность Discord.");
+    }
+}
+
+async function saveDiscordWebhook(event) {
+    event.preventDefault();
+    if (!canManageTabs()) { alert("Настраивать Discord webhook может только Совет или ADMIN."); return; }
+    const value = String(document.getElementById("discordWebhookInput")?.value || "").trim();
+    if (value && !/^https:\/\/(discord\.com|discordapp\.com)\/api\/webhooks\/\d+\/[^\s]+$/i.test(value)) {
+        alert("Некорректный URL Discord webhook."); return;
+    }
+    if (!db) { alert("Firebase ещё не подключён."); return; }
+    try {
+        await db.ref(`${ROOT_PATH}/settings/discordWebhookUrl`).set(value);
+        discordWebhookUrl = value;
+        const status = document.getElementById("discordWebhookStatus");
+        if (status) status.textContent = value ? "СОХРАНЕНО" : "WEBHOOK НЕ ЗАДАН";
+        alert(value ? "Discord webhook сохранён." : "Discord webhook очищен.");
+    } catch (error) {
+        alert("Не удалось сохранить webhook: " + (error.message || error));
+    }
+}
+
+function clearDiscordWebhook() {
+    if (!canManageTabs()) return;
+    const field = document.getElementById("discordWebhookInput");
+    if (field) field.value = "";
+    saveDiscordWebhook({ preventDefault() {} });
 }
 
 function deleteReport(id) {
@@ -1919,6 +2004,10 @@ function renderAdmin() {
     reports.forEach(r => { rhtml += `<tr><td>${r.id}</td><td>${escapeHtml(r.title)}</td><td>${escapeHtml(r.author)}</td><td>${r.access.toUpperCase()}</td><td><button class="btn danger small" onclick="deleteReport(${r.id});renderAdmin();">×</button></td></tr>`; });
     rhtml += `</table>`;
     document.getElementById("adminReportsList").innerHTML = rhtml;
+    const webhookInput = document.getElementById("discordWebhookInput");
+    if (webhookInput && document.activeElement !== webhookInput) webhookInput.value = discordWebhookUrl;
+    const webhookStatus = document.getElementById("discordWebhookStatus");
+    if (webhookStatus) webhookStatus.textContent = discordWebhookUrl ? "WEBHOOK НАСТРОЕН" : "WEBHOOK НЕ ЗАДАН";
     const resetButton = document.getElementById("resetDemoButton");
     if (resetButton) resetButton.style.display = isAdmin() ? "inline-block" : "none";
 }

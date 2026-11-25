@@ -1372,10 +1372,22 @@ async function recognizeArtifactFromPhoto(imageDataUrl) {
         throw new Error(detail || `ИИ-сервер вернул ошибку ${response.status}`);
     }
     const result = await response.json();
-    const requiredStats = ["stamina", "weight", "chemProtection", "gravProtection", "thermProtection", "elecProtection", "blood", "health", "radiation", "meleeProtection", "biteProtection", "hunger", "thirst", "shock"];
-    if (typeof result.name !== "string" || !result.name.trim() || !result.stats || requiredStats.some(key => !Number.isFinite(Number(result.stats[key]))))
-        throw new Error("ИИ не смог прочитать название или все характеристики. Попробуйте загрузить более чёткую фотографию.");
-    return result;
+    const allowedStats = ["stamina", "weight", "chemProtection", "gravProtection", "thermProtection", "elecProtection", "blood", "health", "radiation", "meleeProtection", "biteProtection", "hunger", "thirst", "shock"];
+    if (typeof result.name !== "string" || !result.name.trim() || !result.stats || typeof result.stats !== "object")
+        throw new Error("ИИ не смог прочитать название или характеристики. Попробуйте загрузить более чёткую фотографию.");
+    // Сохраняем только характеристики, которые сервер явно вернул числом.
+    // Отсутствующие поля не превращаем в нули: настоящий 0 остаётся видимым.
+    const detectedStats = {};
+    allowedStats.forEach(key => {
+        if (Object.prototype.hasOwnProperty.call(result.stats, key) &&
+            result.stats[key] !== null && result.stats[key] !== "" &&
+            Number.isFinite(Number(result.stats[key]))) {
+            detectedStats[key] = Number(result.stats[key]);
+        }
+    });
+    if (!Object.keys(detectedStats).length)
+        throw new Error("ИИ не распознал ни одной характеристики на фотографии.");
+    return { name: result.name, stats: detectedStats };
 }
 
 let activeArtifactType = "Все";
@@ -1410,6 +1422,46 @@ function filterArtifacts() {
         nextInput.focus();
         if (cursor !== null) nextInput.setSelectionRange(cursor, cursor);
     }
+}
+
+const ARTIFACT_STAT_FIELDS = [
+    ["stamina", "Стамина", ""],
+    ["weight", "Вес", " кг"],
+    ["chemProtection", "Защита от Химических", "%"],
+    ["gravProtection", "Защита от Гравитационных", "%"],
+    ["thermProtection", "Защита от Термических", "%"],
+    ["elecProtection", "Защита от Электрических", "%"],
+    ["blood", "Кровь", ""],
+    ["health", "Здоровье", ""],
+    ["radiation", "Радиация", ""],
+    ["meleeProtection", "Защита от ближнего оружия", "%"],
+    ["biteProtection", "Защита от укусов", "%"],
+    ["hunger", "Голод", ""],
+    ["thirst", "Жажда", ""],
+    ["shock", "Шок", ""]
+];
+
+function renderArtifactStats(artifact) {
+    // Новые карточки хранят список реально распознанных полей.
+    // Для старых записей оставляем прежнее отображение, чтобы не скрыть их данные.
+    const keys = Array.isArray(artifact.recognizedStats)
+        ? artifact.recognizedStats
+        : ARTIFACT_STAT_FIELDS.filter(([key]) =>
+            Object.prototype.hasOwnProperty.call(artifact, key) &&
+            artifact[key] !== null && artifact[key] !== undefined && Number.isFinite(Number(artifact[key]))
+          ).map(([key]) => key);
+
+    return ARTIFACT_STAT_FIELDS
+        .filter(([key]) => keys.includes(key) &&
+            Object.prototype.hasOwnProperty.call(artifact, key) &&
+            artifact[key] !== null && artifact[key] !== undefined &&
+            Number.isFinite(Number(artifact[key])))
+        .map(([key, label, suffix]) => {
+            const value = Number(artifact[key]);
+            const sign = key === "weight" ? "" : (value >= 0 ? "+" : "");
+            const colorClass = key === "weight" ? "" : (value >= 0 ? "positive" : "negative");
+            return `<div class="stat"><span class="stat-label">${label}:</span><span class="stat-value ${colorClass}">${sign}${value}${suffix}</span></div>`;
+        }).join("");
 }
 
 function renderArtifacts() {
@@ -1447,20 +1499,7 @@ function renderArtifacts() {
                     <div class="artifact-name">${escapeHtml(a.name)}</div>
                     <div class="text-warn mb-10" style="font-size:11px;">ТИП: ${escapeHtml(normalizeArtifactType(a).toUpperCase())} · РЕДКОСТЬ: ${escapeHtml((a.rarity || "НЕ УКАЗАНА").toUpperCase())} · ЦЕНА: ${Number(a.price) || 0} руб.</div>
                     <div class="artifact-stats">
-                        <div class="stat"><span class="stat-label">Стамина:</span><span class="stat-value ${a.stamina >= 0 ? 'positive' : 'negative'}">${a.stamina >= 0 ? '+' : ''}${a.stamina}</span></div>
-                        <div class="stat"><span class="stat-label">Вес:</span><span class="stat-value">${a.weight} кг</span></div>
-                        <div class="stat"><span class="stat-label">Защита от Химических:</span><span class="stat-value ${a.chemProtection >= 0 ? 'positive' : 'negative'}">${a.chemProtection >= 0 ? '+' : ''}${a.chemProtection}%</span></div>
-                        <div class="stat"><span class="stat-label">Защита от Гравитационных:</span><span class="stat-value ${a.gravProtection >= 0 ? 'positive' : 'negative'}">${a.gravProtection >= 0 ? '+' : ''}${a.gravProtection}%</span></div>
-                        <div class="stat"><span class="stat-label">Защита от Термических:</span><span class="stat-value ${a.thermProtection >= 0 ? 'positive' : 'negative'}">${a.thermProtection >= 0 ? '+' : ''}${a.thermProtection}%</span></div>
-                        <div class="stat"><span class="stat-label">Защита от Электрических:</span><span class="stat-value ${a.elecProtection >= 0 ? 'positive' : 'negative'}">${a.elecProtection >= 0 ? '+' : ''}${a.elecProtection}%</span></div>
-                        <div class="stat"><span class="stat-label">Кровь:</span><span class="stat-value ${a.blood >= 0 ? 'positive' : 'negative'}">${a.blood >= 0 ? '+' : ''}${a.blood}</span></div>
-                        <div class="stat"><span class="stat-label">Здоровье:</span><span class="stat-value ${a.health >= 0 ? 'positive' : 'negative'}">${a.health >= 0 ? '+' : ''}${a.health}</span></div>
-                        <div class="stat"><span class="stat-label">Радиация:</span><span class="stat-value ${a.radiation >= 0 ? 'positive' : 'negative'}">${a.radiation >= 0 ? '+' : ''}${a.radiation}</span></div>
-                        <div class="stat"><span class="stat-label">Защита от ближнего оружия:</span><span class="stat-value ${a.meleeProtection >= 0 ? 'positive' : 'negative'}">${a.meleeProtection >= 0 ? '+' : ''}${a.meleeProtection}%</span></div>
-                        <div class="stat"><span class="stat-label">Защита от укусов:</span><span class="stat-value ${a.biteProtection >= 0 ? 'positive' : 'negative'}">${a.biteProtection >= 0 ? '+' : ''}${a.biteProtection}%</span></div>
-                        <div class="stat"><span class="stat-label">Голод:</span><span class="stat-value ${a.hunger >= 0 ? 'positive' : 'negative'}">${a.hunger >= 0 ? '+' : ''}${a.hunger}</span></div>
-                        <div class="stat"><span class="stat-label">Жажда:</span><span class="stat-value ${a.thirst >= 0 ? 'positive' : 'negative'}">${a.thirst >= 0 ? '+' : ''}${a.thirst}</span></div>
-                        <div class="stat"><span class="stat-label">Шок:</span><span class="stat-value ${a.shock >= 0 ? 'positive' : 'negative'}">${a.shock >= 0 ? '+' : ''}${a.shock}</span></div>
+                        ${renderArtifactStats(a)}
                     </div>
                     ${actions ? `<div class="actions">
                         <button class="btn warn small" onclick="editArtifact(${a.id})">✎ РЕДАКТИРОВАТЬ</button>
@@ -1511,6 +1550,7 @@ async function addArtifact(e) {
         newArtifact.name = ai.name.trim();
         newArtifact.photo = imageDataUrl;
         Object.assign(newArtifact, ai.stats);
+        newArtifact.recognizedStats = Object.keys(ai.stats);
         artifacts.push(newArtifact);
         save(STORAGE.artifacts, artifacts);
         renderContent();

@@ -1393,7 +1393,7 @@ function renderBuy() {
             html += `</table></div>`;
         });
     }
-    if (canEditEntries()) { const addBuyCollapsed = collapsedGroups["buy_add_form"] === true; html += `<div class="group-header ${addBuyCollapsed?'is-collapsed':''}" onclick="toggleGroup('buy_add_form')" data-group-id="buy_add_form"><span class="group-title">ДОБАВИТЬ ПОЗИЦИЮ</span><span class="group-toggle">${addBuyCollapsed?'+':'−'}</span></div><div class="group-content ${addBuyCollapsed?'collapsed':''}" id="content_buy_add_form"><div class="form-block mt-10"><form onsubmit="addBuy(event)"><div class="row"><div style="flex:2;min-width:200px;"><label>НАИМЕНОВАНИЕ:</label><input type="text" id="buyItem" required></div><div style="flex:1;min-width:150px;"><label>ЦЕНА:</label><input type="text" id="buyPrice" required></div><div style="flex:1;min-width:150px;"><label>РАЗДЕЛ:</label><select id="buyGroup" required>${BUY_GROUPS.map(g=>`<option value="${g}">${g}</option>`).join('')}</select></div></div><button type="submit" class="btn small">+ ДОБАВИТЬ</button></form></div></div>`; }
+    if (isSovet()) { const addBuyCollapsed = collapsedGroups["buy_add_form"] === true; html += `<div class="group-header ${addBuyCollapsed?'is-collapsed':''}" onclick="toggleGroup('buy_add_form')" data-group-id="buy_add_form"><span class="group-title">ДОБАВИТЬ ПОЗИЦИЮ</span><span class="group-toggle">${addBuyCollapsed?'+':'−'}</span></div><div class="group-content ${addBuyCollapsed?'collapsed':''}" id="content_buy_add_form"><div class="form-block mt-10"><form onsubmit="addBuy(event)"><div class="row"><div style="flex:2;min-width:200px;"><label>НАИМЕНОВАНИЕ:</label><input type="text" id="buyItem" required></div><div style="flex:1;min-width:150px;"><label>ЦЕНА:</label><input type="text" id="buyPrice" required></div><div style="flex:1;min-width:150px;"><label>РАЗДЕЛ:</label><select id="buyGroup" required>${BUY_GROUPS.map(g=>`<option value="${g}">${g}</option>`).join('')}</select></div></div><button type="submit" class="btn small">+ ДОБАВИТЬ</button></form></div></div>`; }
     html += renderBuyCalculator(); return html;
 }
 function filterCatalog(inputId) {
@@ -1409,7 +1409,7 @@ function filterCatalog(inputId) {
     });
 }
 function addBuy(e) {
-    e.preventDefault(); if (!canEditEntries()) return;
+    e.preventDefault(); if (!isSovet()) { alert("Добавлять позиции в скупку может только Совет."); return; }
     const newId = buy.length ? Math.max(...buy.map(x=>x.id))+1 : 1;
     buy.push({ id:newId, item:document.getElementById("buyItem").value.trim(), price:document.getElementById("buyPrice").value.trim(), group:document.getElementById("buyGroup").value });
     save(STORAGE.buy, buy); renderContent();
@@ -1561,7 +1561,7 @@ function renderSell() {
         });
     }
 
-    if (canEditEntries()) {
+    if (isSovet()) {
         const addSellCollapsed = collapsedGroups["sell_add_form"] === true;
         html += `<div class="group-header ${addSellCollapsed?'is-collapsed':''}" onclick="toggleGroup('sell_add_form')" data-group-id="sell_add_form"><span class="group-title">ДОБАВИТЬ ПОЗИЦИЮ</span><span class="group-toggle">${addSellCollapsed?'+':'−'}</span></div><div class="group-content ${addSellCollapsed?'collapsed':''}" id="content_sell_add_form"><div class="form-block mt-10"><form onsubmit="addSell(event)">
         <div class="row">
@@ -1689,7 +1689,7 @@ function clearSellCalc() {
 
 function addSell(e) {
     e.preventDefault();
-    if (!canEditEntries()) return;
+    if (!isSovet()) { alert("Добавлять позиции в продажу может только Совет."); return; }
     const newId = sell.length ? Math.max(...sell.map(x=>x.id))+1 : 1;
     sell.push({ id: newId, item: document.getElementById("sellItem").value.trim(), price: document.getElementById("sellPrice").value.trim(), group: document.getElementById("sellGroup").value.trim() });
     save(STORAGE.sell, sell); renderContent();

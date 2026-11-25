@@ -840,7 +840,7 @@ function renderContent() {
     if (!tab) { content.innerHTML = `<div class="ascii-box danger">[ОШИБКА] Вкладка не найдена.</div>`; return; }
     if (!canSeeTab(tab)) { content.innerHTML = `<div class="ascii-box danger">[ОТКАЗ В ДОСТУПЕ]\n"${tab.label}"\nТребуется: ${tab.minRole.toUpperCase()}.\nВаш уровень: ${currentRole().toUpperCase()}.</div>`; return; }
     content.innerHTML = renderTabContent(tab.id);
-    if (tab.id === "sell") restoreGroupStates();
+    if (["artifacts", "buy", "sell"].includes(tab.id)) restoreGroupStates();
 }
 
 function renderTabContent(id) {
@@ -1277,7 +1277,8 @@ function renderArtifacts() {
     }
 
     if (canEditEntries()) {
-        html += `<div class="form-block mt-10"><h3>[ ДОБАВИТЬ АРТЕФАКТ ]</h3><form onsubmit="addArtifact(event)">
+        const addArtifactCollapsed = collapsedGroups["artifact_add_form"] === true;
+        html += `<div class="group-header ${addArtifactCollapsed ? 'is-collapsed' : ''}" onclick="toggleGroup('artifact_add_form')" data-group-id="artifact_add_form"><span class="group-title">ДОБАВИТЬ АРТЕФАКТ</span><span class="group-toggle">${addArtifactCollapsed ? '+' : '−'}</span></div><div class="group-content ${addArtifactCollapsed ? 'collapsed' : ''}" id="content_artifact_add_form"><div class="form-block mt-10"><form onsubmit="addArtifact(event)">
         <label>НАЗВАНИЕ АРТЕФАКТА:</label>
         <input type="text" id="artName" required>
         <label>ТИП АРТЕФАКТА:</label>
@@ -1296,7 +1297,7 @@ function renderArtifacts() {
         <div class="stat-input"><label>Голод:</label><input type="number" id="artHunger" step="0.1" value="0"></div>
         <div class="stat-input"><label>Жажда:</label><input type="number" id="artThirst" step="0.1" value="0"></div>
         <div class="stat-input"><label>Шок:</label><input type="number" id="artShock" step="0.1" value="0"></div>
-        <button type="submit" class="btn small mt-10">+ ДОБАВИТЬ АРТЕФАКТ</button></form></div>`;
+        <button type="submit" class="btn small mt-10">+ ДОБАВИТЬ АРТЕФАКТ</button></form></div></div>`;
     }
     return html;
 }
@@ -1392,7 +1393,7 @@ function renderBuy() {
             html += `</table></div>`;
         });
     }
-    if (canEditEntries()) html += `<div class="form-block mt-10"><h3>[ ДОБАВИТЬ ПОЗИЦИЮ ]</h3><form onsubmit="addBuy(event)"><div class="row"><div style="flex:2;min-width:200px;"><label>НАИМЕНОВАНИЕ:</label><input type="text" id="buyItem" required></div><div style="flex:1;min-width:150px;"><label>ЦЕНА:</label><input type="text" id="buyPrice" required></div><div style="flex:1;min-width:150px;"><label>РАЗДЕЛ:</label><select id="buyGroup" required>${BUY_GROUPS.map(g=>`<option value="${g}">${g}</option>`).join('')}</select></div></div><button type="submit" class="btn small">+ ДОБАВИТЬ</button></form></div>`;
+    if (canEditEntries()) { const addBuyCollapsed = collapsedGroups["buy_add_form"] === true; html += `<div class="group-header ${addBuyCollapsed?'is-collapsed':''}" onclick="toggleGroup('buy_add_form')" data-group-id="buy_add_form"><span class="group-title">ДОБАВИТЬ ПОЗИЦИЮ</span><span class="group-toggle">${addBuyCollapsed?'+':'−'}</span></div><div class="group-content ${addBuyCollapsed?'collapsed':''}" id="content_buy_add_form"><div class="form-block mt-10"><form onsubmit="addBuy(event)"><div class="row"><div style="flex:2;min-width:200px;"><label>НАИМЕНОВАНИЕ:</label><input type="text" id="buyItem" required></div><div style="flex:1;min-width:150px;"><label>ЦЕНА:</label><input type="text" id="buyPrice" required></div><div style="flex:1;min-width:150px;"><label>РАЗДЕЛ:</label><select id="buyGroup" required>${BUY_GROUPS.map(g=>`<option value="${g}">${g}</option>`).join('')}</select></div></div><button type="submit" class="btn small">+ ДОБАВИТЬ</button></form></div></div>`; }
     html += renderBuyCalculator(); return html;
 }
 function filterCatalog(inputId) {
@@ -1426,7 +1427,8 @@ function deleteBuy(id) { if(!canEditEntries())return; if(!confirm("Удалит�
 // ===== КАЛЬКУЛЯТОР СКУПКИ (процент ВЫЧИТАЕТСЯ) =====
 function renderBuyCalculator() {
     let html = `
-<div class="calculator">
+<div class="group-header ${collapsedGroups["buy_calculator"] ? 'is-collapsed' : ''}" onclick="toggleGroup('buy_calculator')" data-group-id="buy_calculator"><span class="group-title">КАЛЬКУЛЯТОР СКУПКИ</span><span class="group-toggle">${collapsedGroups["buy_calculator"] ? '+' : '−'}</span></div>
+<div class="group-content ${collapsedGroups["buy_calculator"] ? 'collapsed' : ''}" id="content_buy_calculator"><div class="calculator">
     <h3>[ КАЛЬКУЛЯТОР СКУПКИ ]</h3>
     <p class="text-warn" style="font-size:12px;margin-bottom:15px;">// Выберите позиции и укажите количество. Комиссия ISG вычитается из суммы.</p>
     <div id="buyCalcItems"></div>
@@ -1442,7 +1444,7 @@ function renderBuyCalculator() {
         <div class="total-line final"><span>К ВЫПЛАТЕ:</span><span>0 руб.</span></div>
     </div>
     <button class="btn danger small" onclick="clearBuyCalc()" style="margin-top:10px;">ОЧИСТИТЬ</button>
-</div>`;
+</div></div>`;
     return html;
 }
 
@@ -1560,13 +1562,14 @@ function renderSell() {
     }
 
     if (canEditEntries()) {
-        html += `<div class="form-block mt-10"><h3>[ ДОБАВИТЬ ПОЗИЦИЮ ]</h3><form onsubmit="addSell(event)">
+        const addSellCollapsed = collapsedGroups["sell_add_form"] === true;
+        html += `<div class="group-header ${addSellCollapsed?'is-collapsed':''}" onclick="toggleGroup('sell_add_form')" data-group-id="sell_add_form"><span class="group-title">ДОБАВИТЬ ПОЗИЦИЮ</span><span class="group-toggle">${addSellCollapsed?'+':'−'}</span></div><div class="group-content ${addSellCollapsed?'collapsed':''}" id="content_sell_add_form"><div class="form-block mt-10"><form onsubmit="addSell(event)">
         <div class="row">
             <div style="flex:2;min-width:200px;"><label>НАИМЕНОВАНИЕ:</label><input type="text" id="sellItem" required></div>
             <div style="flex:1;min-width:150px;"><label>ЦЕНА:</label><input type="text" id="sellPrice" required></div>
             <div style="flex:1;min-width:200px;"><label>КАТЕГОРИЯ:</label><select id="sellGroup" required>${SELL_CATEGORIES.map(g=>`<option value="${g}">${g}</option>`).join('')}</select></div>
         </div>
-        <button type="submit" class="btn small">+ ДОБАВИТЬ</button></form></div>`;
+        <button type="submit" class="btn small">+ ДОБАВИТЬ</button></form></div></div>`;
     }
 
     html += renderSellCalculator();
@@ -1617,7 +1620,8 @@ function restoreGroupStates() {
 // ===== КАЛЬКУЛЯТОР ПРОДАЖИ (БЕЗ НАЦЕНКИ) =====
 function renderSellCalculator() {
     let html = `
-<div class="calculator">
+<div class="group-header ${collapsedGroups["sell_calculator"] ? 'is-collapsed' : ''}" onclick="toggleGroup('sell_calculator')" data-group-id="sell_calculator"><span class="group-title">КАЛЬКУЛЯТОР ПРОДАЖИ</span><span class="group-toggle">${collapsedGroups["sell_calculator"] ? '+' : '−'}</span></div>
+<div class="group-content ${collapsedGroups["sell_calculator"] ? 'collapsed' : ''}" id="content_sell_calculator"><div class="calculator">
     <h3>[ КАЛЬКУЛЯТОР ПРОДАЖИ ]</h3>
     <p class="text-warn" style="font-size:12px;margin-bottom:15px;">// Выберите товары и укажите количество.</p>
     <div id="sellCalcItems"></div>
@@ -1626,7 +1630,7 @@ function renderSellCalculator() {
         <div class="total-line final"><span>ИТОГО К ОПЛАТЕ:</span><span>0 руб.</span></div>
     </div>
     <button class="btn danger small" onclick="clearSellCalc()" style="margin-top:10px;">ОЧИСТИТЬ</button>
-</div>`;
+</div></div>`;
     return html;
 }
 

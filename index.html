@@ -392,7 +392,19 @@ tr:hover td { background: rgba(0,255,65,0.05); }
             <button type="submit" class="btn">&gt; ВОЙТИ В СИСТЕМУ</button>
         </form>
         <p class="mt-10" style="font-size:11px;color:#ff0033;">! Несанкционированный доступ фиксируется и преследуется.</p>
-        <p class="mt-10" style="font-size:11px;color:#ffb000;">Бойцы: доступ только по регистрации через Высший Совет.</p>
+        <p class="mt-10" style="font-size:11px;color:#ffb000;">Нет допуска? Подайте заявку — Совет рассмотрит её.</p>
+        <hr style="border-color:#ffb000;margin:18px 0;">
+        <h3 style="color:#ffb000;">&gt; ЗАПРОС НА РЕГИСТРАЦИЮ_</h3>
+        <form onsubmit="submitApplication(event)">
+            <label>ЖЕЛАЕМЫЙ ПОЗЫВНОЙ:</label>
+            <input type="text" id="applyCallsign" required maxlength="20" autocomplete="off">
+            <label>ПАРОЛЬ:</label>
+            <input type="password" id="applyPass" required minlength="4" maxlength="64" autocomplete="new-password">
+            <label>ПОВТОРИТЕ ПАРОЛЬ:</label>
+            <input type="password" id="applyPassConfirm" required minlength="4" maxlength="64" autocomplete="new-password">
+            <button type="submit" class="btn">+ ОТПРАВИТЬ ЗАЯВКУ СОВЕТУ</button>
+        </form>
+        <p style="font-size:11px;color:#ffb000;">После одобрения Советом вы сможете войти с указанными позывным и паролем.</p>
     </div>
 </div>
 
@@ -400,6 +412,9 @@ tr:hover td { background: rgba(0,255,65,0.05); }
     <div class="modal-content warn">
         <button class="modal-close" onclick="closeModal('adminModal')">×</button>
         <h2 style="color:#ffb000;">&gt; АДМИН-ПАНЕЛЬ СОВЕТА_</h2>
+        <h3 style="color:#ffb000;">[ ЗАЯВКИ НА РЕГИСТРАЦИЮ ]</h3>
+        <div id="adminApplicationsList"></div>
+        <hr style="border-color:#ffb000;margin:20px 0;">
         <h3 style="color:#ffb000;">[ УПРАВЛЕНИЕ БОЙЦАМИ ]</h3>
         <div id="adminFightersList"></div>
         <form onsubmit="registerFighter(event)" class="mt-10">
@@ -466,6 +481,7 @@ const DEFAULT_STALKERS = [
 ];
 
 const DEFAULT_STALKER_TASKS = [];
+const DEFAULT_MUTANT_DATABASE = [];
 
 const DEFAULT_TRUSTED = [
     { id: 1, callsign: "ПРИЗРАК", status: "АКТИВЕН", birthDate: "1975-05-30", note: "Высший уровень доверия.", photo: "" },
@@ -539,6 +555,7 @@ const DEFAULT_TABS = [
     { id: "agents", label: "АГЕНТЫ", minRole: "boets" },
     { id: "stalkers", label: "СТАЛКЕРЫ", minRole: "boets" },
     { id: "stalkerTasks", label: "ЗАДАНИЯ СТАЛКЕРОВ", minRole: "boets" },
+    { id: "mutantDatabase", label: "БАЗА МУТАНТОВ", minRole: "boets" },
     { id: "trusted", label: "ДОВЕРЕННЫЕ", minRole: "boets" },
     { id: "artifacts", label: "АРТЕФАКТЫ", minRole: "boets" },
     { id: "buy", label: "СКУПКА", minRole: "boets" },
@@ -559,7 +576,7 @@ const ROOT_PATH = "isg";
 // Реальные права доступа задаются Firebase Authentication + Database Rules,
 // проверки ролей в HTML нужны только для отображения интерфейса.
 const STORAGE = {
-    tabs: "tabs", fighters: "fighters", stalkers: "stalkers", stalkerTasks: "stalkerTasks",
+    tabs: "tabs", fighters: "fighters", applications: "applications", stalkers: "stalkers", stalkerTasks: "stalkerTasks", mutantDatabase: "mutantDatabase",
     trusted: "trusted", artifacts: "artifacts", buy: "buy",
     sell: "sell", reports: "reports", session: "isg_session"
 };
@@ -569,8 +586,10 @@ let db = null;
 let dbWriteQueue = Promise.resolve();
 let tabs = JSON.parse(JSON.stringify(DEFAULT_TABS));
 let fighters = JSON.parse(JSON.stringify(DEFAULT_FIGHTERS));
+let applications = [];
 let stalkers = JSON.parse(JSON.stringify(DEFAULT_STALKERS));
 let stalkerTasks = JSON.parse(JSON.stringify(DEFAULT_STALKER_TASKS));
+let mutantDatabase = JSON.parse(JSON.stringify(DEFAULT_MUTANT_DATABASE));
 let trusted = JSON.parse(JSON.stringify(DEFAULT_TRUSTED));
 let artifacts = JSON.parse(JSON.stringify(DEFAULT_ARTIFACTS));
 let buy = JSON.parse(JSON.stringify(DEFAULT_BUY));
@@ -611,13 +630,14 @@ function setConnectionStatus(label, cssClass) {
     if (node) { node.textContent = label; node.className = cssClass || ""; }
 }
 const FIREBASE_DEFAULTS = {
-    tabs: DEFAULT_TABS, fighters: DEFAULT_FIGHTERS, stalkers: DEFAULT_STALKERS, stalkerTasks: DEFAULT_STALKER_TASKS,
+    tabs: DEFAULT_TABS, fighters: DEFAULT_FIGHTERS, applications: [], stalkers: DEFAULT_STALKERS, stalkerTasks: DEFAULT_STALKER_TASKS, mutantDatabase: DEFAULT_MUTANT_DATABASE,
     trusted: DEFAULT_TRUSTED, artifacts: DEFAULT_ARTIFACTS, buy: DEFAULT_BUY,
     sell: DEFAULT_SELL, reports: DEFAULT_REPORTS
 };
 const STATE_SETTERS = {
     tabs: v => tabs = normalizeList(v),
     fighters: v => fighters = normalizeList(v),
+    applications: v => applications = normalizeList(v),
     stalkers: v => stalkers = normalizeList(v).map(s => ({
         ...s,
         rank: /^[1-5]$/.test(String(s.rank || "")) ? String(s.rank) : "1",
@@ -626,6 +646,7 @@ const STATE_SETTERS = {
             : "АКТИВЕН"
     })),
     stalkerTasks: v => stalkerTasks = normalizeList(v),
+    mutantDatabase: v => mutantDatabase = normalizeList(v),
     trusted: v => trusted = normalizeList(v),
     artifacts: v => artifacts = normalizeList(v),
     buy: v => buy = normalizeList(v).map(x => ({ ...x, price: String(x.price || "").replace(/у\.е\.?/gi, "руб.") })),
@@ -657,6 +678,12 @@ async function initFirebase() {
         if (!tabs.some(t => t.id === "stalkerTasks")) {
             const stalkersIndex = tabs.findIndex(t => t.id === "stalkers");
             tabs.splice(stalkersIndex >= 0 ? stalkersIndex + 1 : tabs.length, 0, { id: "stalkerTasks", label: "ЗАДАНИЯ СТАЛКЕРОВ", minRole: "boets" });
+            await db.ref(`${ROOT_PATH}/tabs`).set(tabs);
+        }
+
+        if (!tabs.some(t => t.id === "mutantDatabase")) {
+            const stalkersIndex = tabs.findIndex(t => t.id === "stalkerTasks");
+            tabs.splice(stalkersIndex >= 0 ? stalkersIndex + 1 : tabs.length, 0, { id: "mutantDatabase", label: "БАЗА МУТАНТОВ", minRole: "boets" });
             await db.ref(`${ROOT_PATH}/tabs`).set(tabs);
         }
 
@@ -704,6 +731,51 @@ function openPhoto(src, callsign) {
 }
 function closePhotoModal(e) { if (e.target === document.getElementById("photoModal")) document.getElementById("photoModal").classList.remove("open"); }
 function closePhotoModalDirect() { document.getElementById("photoModal").classList.remove("open"); }
+
+function submitApplication(e) {
+    e.preventDefault();
+    const callsign = document.getElementById("applyCallsign").value.trim().toUpperCase();
+    const password = document.getElementById("applyPass").value;
+    const confirmPassword = document.getElementById("applyPassConfirm").value;
+    if (!/^[А-ЯЁA-Z0-9_-]{2,20}$/i.test(callsign)) {
+        alert("[ОШИБКА] Позывной: 2–20 символов, только буквы, цифры, дефис и подчёркивание.");
+        return;
+    }
+    if (callsign === SOVET_CALLSIGN || fighters.some(f => String(f.callsign).toUpperCase() === callsign)) {
+        alert("[ОШИБКА] Этот позывной уже занят или зарезервирован.");
+        return;
+    }
+    if (password !== confirmPassword) {
+        alert("[ОШИБКА] Пароли не совпадают.");
+        return;
+    }
+    if (applications.some(a => String(a.callsign).toUpperCase() === callsign)) {
+        alert("[ОШИБКА] Заявка с таким позывным уже ожидает рассмотрения.");
+        return;
+    }
+    applications.push({ id: Date.now(), callsign, password, submittedAt: new Date().toISOString() });
+    save(STORAGE.applications, applications);
+    e.target.reset();
+    alert("[СИСТЕМА] Заявка отправлена Высшему Совету. Дождитесь решения.");
+}
+
+function reviewApplication(id, approve) {
+    if (!isSovet()) return;
+    const application = applications.find(a => Number(a.id) === Number(id));
+    if (!application) return;
+    if (approve) {
+        if (fighters.some(f => String(f.callsign).toUpperCase() === String(application.callsign).toUpperCase())) {
+            alert("[ОШИБКА] Позывной уже зарегистрирован.");
+            return;
+        }
+        fighters.push({ callsign: application.callsign, password: application.password, rank: "Боец", status: "АКТИВЕН", note: "Регистрация одобрена Советом." });
+        save(STORAGE.fighters, fighters);
+    }
+    applications = applications.filter(a => Number(a.id) !== Number(id));
+    save(STORAGE.applications, applications);
+    renderAdmin();
+    alert(approve ? `[СИСТЕМА] Заявка ${application.callsign} одобрена.` : `[СИСТЕМА] Заявка ${application.callsign} отклонена.`);
+}
 
 function handleLogin(e) {
     e.preventDefault();
@@ -777,6 +849,7 @@ function renderTabContent(id) {
         case "agents": return renderAgents();
         case "stalkers": return renderStalkers();
         case "stalkerTasks": return renderStalkerTasks();
+        case "mutantDatabase": return renderMutantDatabase();
         case "trusted": return renderTrusted();
         case "artifacts": return renderArtifacts();
         case "buy": return renderBuy();
@@ -1004,6 +1077,45 @@ function deleteStalkerTask(id) {
     if (!canEditEntries() || !confirm('Удалить задание?')) return;
     stalkerTasks = stalkerTasks.filter(x => x.id !== id);
     save(STORAGE.stalkerTasks, stalkerTasks); renderContent();
+}
+
+function renderMutantDatabase() {
+    let html = `<h1>&gt; БАЗА ДАННЫХ МУТАНТОВ_</h1>
+<p class="text-warn" style="font-size:12px;">// Справочник мутантов, частей добычи и их стоимости.</p>
+<div class="form-block"><label>ПОИСК МУТАНТА:</label><input type="search" id="mutantSearch" placeholder="Название мутанта или часть добычи..." oninput="filterMutants()"></div>`;
+    if (!mutantDatabase.length) html += `<p class="text-warn">// Записи пока отсутствуют</p>`;
+    else {
+        const actions = canEditEntries();
+        html += `<table><tr><th>МУТАНТ</th><th>ЧТО ПАДАЕТ ПРИ РАЗДЕЛКЕ</th><th>СТОИМОСТЬ</th>${actions ? '<th>ДЕЙСТВИЕ</th>' : ''}</tr>`;
+        mutantDatabase.forEach(m => {
+            html += `<tr class="mutant-row" data-search="${escapeHtml((m.name+' '+m.drop).toLocaleLowerCase('ru'))}"><td>${escapeHtml(m.name)}</td><td>${escapeHtml(m.drop)}</td><td>${escapeHtml(m.price)} руб.</td>${actions ? `<td><button class="btn warn small" onclick="editMutant(${m.id})">✎</button> <button class="btn danger small" onclick="deleteMutant(${m.id})">×</button></td>` : ''}</tr>`;
+        });
+        html += `</table>`;
+    }
+    if (canEditEntries()) html += `<div class="form-block mt-10"><h3>[ ДОБАВИТЬ МУТАНТА ]</h3><form onsubmit="addMutant(event)"><div class="row"><div style="flex:1;min-width:170px;"><label>НАЗВАНИЕ МУТАНТА:</label><input id="mutantName" required></div><div style="flex:1;min-width:200px;"><label>ЧТО ПАДАЕТ ПРИ РАЗДЕЛКЕ:</label><input id="mutantDrop" required></div><div style="flex:1;min-width:140px;"><label>СТОИМОСТЬ (РУБ.):</label><input id="mutantPrice" type="number" min="0" step="0.01" required></div></div><button type="submit" class="btn small">+ ДОБАВИТЬ</button></form></div>`;
+    return html;
+}
+function filterMutants() {
+    const q = (document.getElementById('mutantSearch')?.value || '').trim().toLocaleLowerCase('ru');
+    document.querySelectorAll('.mutant-row').forEach(row => row.style.display = row.dataset.search.includes(q) ? '' : 'none');
+}
+function addMutant(e) {
+    e.preventDefault(); if (!canEditEntries()) return;
+    const id = mutantDatabase.length ? Math.max(...mutantDatabase.map(x => Number(x.id)||0))+1 : 1;
+    mutantDatabase.push({ id, name: document.getElementById('mutantName').value.trim(), drop: document.getElementById('mutantDrop').value.trim(), price: String(document.getElementById('mutantPrice').value).trim() });
+    save(STORAGE.mutantDatabase, mutantDatabase); renderContent();
+}
+function editMutant(id) {
+    if (!canEditEntries()) return; const m = mutantDatabase.find(x => x.id === id); if (!m) return;
+    const name = prompt('Название мутанта:', m.name); if (name === null) return;
+    const drop = prompt('Что падает при разделке:', m.drop); if (drop === null) return;
+    const price = prompt('Стоимость в рублях:', m.price); if (price === null) return;
+    Object.assign(m, { name: name.trim() || m.name, drop: drop.trim() || m.drop, price: price.trim() || m.price });
+    save(STORAGE.mutantDatabase, mutantDatabase); renderContent();
+}
+function deleteMutant(id) {
+    if (!canEditEntries() || !confirm('Удалить запись о мутанте?')) return;
+    mutantDatabase = mutantDatabase.filter(x => x.id !== id); save(STORAGE.mutantDatabase, mutantDatabase); renderContent();
 }
 
 function renderTrusted() {
@@ -1251,57 +1363,62 @@ function deleteArtifact(id) {
 }
 
 // ===== СКУПКА =====
+const BUY_GROUPS = ["Артефакты", "Мутанты", "Документы"];
+function normalizeBuyGroup(item) {
+    if (BUY_GROUPS.includes(item.group)) return item.group;
+    const name = String(item.item || "").toLowerCase();
+    if (/документ|досье|карта|схема|записк|отч[её]т|архив/.test(name)) item.group = "Документы";
+    else if (/мутант|образц|туш|орган|кров|когт|зуб|шерст|часть тела/.test(name)) item.group = "Мутанты";
+    else item.group = "Артефакты";
+    return item.group;
+}
 function renderBuy() {
+    buy.forEach(normalizeBuyGroup);
     let html = `<h1>&gt; СКУПКА РЕСУРСОВ_</h1>
-    <p class="text-warn" style="font-size:12px;">// Список позиций. Любой авторизованный может редактировать.</p>`;
-
-    if (buy.length === 0) {
-        html += `<p class="text-warn">// Позиций нет</p>`;
-    } else {
+    <p class="text-warn" style="font-size:12px;">// Принимаем артефакты, материалы мутантов и документы.</p>
+    <div class="form-block"><label>ПОИСК ТОВАРА:</label><input type="search" id="buySearch" placeholder="Введите название товара..." oninput="filterCatalog('buySearch')"></div>`;
+    if (buy.length === 0) html += `<p class="text-warn">// Позиций нет</p>`;
+    else {
         const actions = canEditEntries();
-        html += `<table><tr><th>ТОВАР</th><th>ЦЕНА</th>${actions?'<th>ДЕЙСТВИЕ</th>':''}</tr>`;
-        buy.forEach(b => {
-            html += `<tr><td>${escapeHtml(b.item)}</td><td>${escapeHtml(b.price)}</td>${actions?`<td><button class="btn warn small" onclick="editBuy(${b.id})">✎</button> <button class="btn danger small" onclick="deleteBuy(${b.id})">×</button></td>`:''}</tr>`;
+        BUY_GROUPS.forEach(groupName => {
+            const items = buy.filter(b => b.group === groupName);
+            if (!items.length) return;
+            const groupId = "buy_" + groupName.toLowerCase();
+            html += `<div class="group-header" onclick="toggleGroup('${groupId}')" data-group-id="${groupId}"><span class="group-title">${escapeHtml(groupName.toUpperCase())}</span><span class="group-count">[${items.length}]</span><span class="group-toggle">−</span></div><div class="group-content" id="content_${groupId}"><table><tr><th>ТОВАР</th><th>ЦЕНА</th>${actions?'<th>ДЕЙСТВИЕ</th>':''}</tr>`;
+            items.forEach(b => { html += `<tr class="catalog-row" data-search="${escapeHtml((b.item+' '+b.group).toLowerCase())}"><td>${escapeHtml(b.item)}</td><td>${escapeHtml(b.price)}</td>${actions?`<td><button class="btn warn small" onclick="editBuy(${b.id})">✎</button> <button class="btn danger small" onclick="deleteBuy(${b.id})">×</button></td>`:''}</tr>`; });
+            html += `</table></div>`;
         });
-        html += `</table>`;
     }
-
-    if (canEditEntries()) {
-        html += `<div class="form-block mt-10"><h3>[ ДОБАВИТЬ ПОЗИЦИЮ ]</h3><form onsubmit="addBuy(event)">
-        <div class="row">
-            <div style="flex:2;min-width:200px;"><label>НАИМЕНОВАНИЕ:</label><input type="text" id="buyItem" required></div>
-            <div style="flex:1;min-width:150px;"><label>ЦЕНА:</label><input type="text" id="buyPrice" required></div>
-        </div>
-        <button type="submit" class="btn small">+ ДОБАВИТЬ</button></form></div>`;
-    }
-
-    html += renderBuyCalculator();
-    return html;
+    if (canEditEntries()) html += `<div class="form-block mt-10"><h3>[ ДОБАВИТЬ ПОЗИЦИЮ ]</h3><form onsubmit="addBuy(event)"><div class="row"><div style="flex:2;min-width:200px;"><label>НАИМЕНОВАНИЕ:</label><input type="text" id="buyItem" required></div><div style="flex:1;min-width:150px;"><label>ЦЕНА:</label><input type="text" id="buyPrice" required></div><div style="flex:1;min-width:150px;"><label>РАЗДЕЛ:</label><select id="buyGroup" required>${BUY_GROUPS.map(g=>`<option value="${g}">${g}</option>`).join('')}</select></div></div><button type="submit" class="btn small">+ ДОБАВИТЬ</button></form></div>`;
+    html += renderBuyCalculator(); return html;
 }
-
+function filterCatalog(inputId) {
+    const input = document.getElementById(inputId); if (!input) return;
+    const query = input.value.trim().toLocaleLowerCase('ru');
+    document.querySelectorAll('.catalog-row').forEach(row => { row.style.display = row.dataset.search.includes(query) ? '' : 'none'; });
+    document.querySelectorAll('.group-content').forEach(group => {
+        if (!group.querySelector('.catalog-row')) return;
+        const visible = Array.from(group.querySelectorAll('.catalog-row')).some(row => row.style.display !== 'none');
+        group.style.display = visible ? '' : 'none';
+        const header = document.querySelector(`.group-header[data-group-id="${group.id.replace('content_', '')}"]`);
+        if (header) header.style.display = visible ? '' : 'none';
+    });
+}
 function addBuy(e) {
-    e.preventDefault();
-    if (!canEditEntries()) return;
+    e.preventDefault(); if (!canEditEntries()) return;
     const newId = buy.length ? Math.max(...buy.map(x=>x.id))+1 : 1;
-    buy.push({ id: newId, item: document.getElementById("buyItem").value.trim(), price: document.getElementById("buyPrice").value.trim() });
+    buy.push({ id:newId, item:document.getElementById("buyItem").value.trim(), price:document.getElementById("buyPrice").value.trim(), group:document.getElementById("buyGroup").value });
     save(STORAGE.buy, buy); renderContent();
 }
-
 function editBuy(id) {
-    if (!canEditEntries()) return;
-    const b = buy.find(x => x.id === id); if (!b) return;
-    const item = prompt("Товар:", b.item); if (item === null) return;
-    const price = prompt("Цена:", b.price); if (price === null) return;
-    b.item = item.trim()||b.item; b.price = price.trim()||b.price;
-    save(STORAGE.buy, buy); renderContent();
+    if (!canEditEntries()) return; const b=buy.find(x=>x.id===id); if(!b)return;
+    const item=prompt("Товар:",b.item); if(item===null)return;
+    const price=prompt("Цена:",b.price); if(price===null)return;
+    const group=prompt("Раздел (Артефакты, Мутанты, Документы):",normalizeBuyGroup(b)); if(group===null)return;
+    if(!BUY_GROUPS.includes(group.trim())){alert("Выберите раздел: Артефакты, Мутанты или Документы.");return;}
+    b.item=item.trim()||b.item; b.price=price.trim()||b.price; b.group=group.trim(); save(STORAGE.buy,buy); renderContent();
 }
-
-function deleteBuy(id) {
-    if (!canEditEntries()) return;
-    if (!confirm("Удалить позицию?")) return;
-    buy = buy.filter(b => b.id !== id);
-    save(STORAGE.buy, buy); renderContent();
-}
+function deleteBuy(id) { if(!canEditEntries())return; if(!confirm("Удалить позицию?"))return; buy=buy.filter(b=>b.id!==id); save(STORAGE.buy,buy); renderContent(); }
 
 // ===== КАЛЬКУЛЯТОР СКУПКИ (процент ВЫЧИТАЕТСЯ) =====
 function renderBuyCalculator() {
@@ -1387,10 +1504,28 @@ function clearBuyCalc() {
     updateBuyCalc();
 }
 
+// ===== КАТЕГОРИИ ПРОДАЖИ =====
+const SELL_CATEGORIES = ["Одежда", "Медикаменты", "Оружие и магазины", "Детекторы и контейнеры", "Противогазы"];
+function normalizeSellCategory(entry) {
+    const source = String((entry.group || "") + " " + (entry.item || "")).toLocaleLowerCase("ru");
+    let category = "";
+    if (/противогаз|газмаск|респиратор/.test(source)) category = "Противогазы";
+    else if (/детектор|контейнер|артефакт|аномал/.test(source)) category = "Детекторы и контейнеры";
+    else if (/оруж|магазин|патрон|пистолет|винтов|автомат|дробовик/.test(source)) category = "Оружие и магазины";
+    else if (/медикамент|аптеч|медицин|бинт|антирад|лекарств|стимулятор/.test(source)) category = "Медикаменты";
+    else if (/одежд|костюм|брон|куртк|сапог|перчатк/.test(source)) category = "Одежда";
+    else if (SELL_CATEGORIES.includes(entry.group)) category = entry.group;
+    else category = "Одежда";
+    entry.group = category;
+    return category;
+}
+
 // ===== ПРОДАЖА =====
 function renderSell() {
+    sell.forEach(normalizeSellCategory);
     let html = `<h1>&gt; КАТАЛОГ ПРОДАЖ_</h1>
-    <p class="text-warn" style="font-size:12px;">// Каталог сгруппирован по категориям. Клик по заголовку — свернуть/развернуть.</p>`;
+    <p class="text-warn" style="font-size:12px;">// Каталог сгруппирован по категориям. Клик по заголовку — свернуть/развернуть.</p>
+    <div class="form-block"><label>ПОИСК ТОВАРА:</label><input type="search" id="sellSearch" placeholder="Введите название товара..." oninput="filterCatalog('sellSearch')"></div>`;
 
     if (sell.length === 0) {
         html += `<p class="text-warn">// Каталог пуст</p>`;
@@ -1402,7 +1537,8 @@ function renderSell() {
             <button class="btn small" onclick="toggleAllGroups(false)">▾ РАЗВЕРНУТЬ ВСЕ</button>
             <button class="btn small warn" onclick="toggleAllGroups(true)">▸ СВЕРНУТЬ ВСЕ</button>
         </div>`;
-        Object.keys(groups).sort().forEach(groupName => {
+        SELL_CATEGORIES.forEach(groupName => {
+            if (!groups[groupName] || !groups[groupName].length) return;
             const groupId = "group_" + groupName.replace(/\s+/g, '_');
             const isCollapsed = collapsedGroups[groupId] === true;
             const count = groups[groupName].length;
@@ -1414,7 +1550,7 @@ function renderSell() {
             <div class="group-content ${isCollapsed?'collapsed':''}" id="content_${groupId}">
             <table><tr><th>ТОВАР / УСЛУГА</th><th>ЦЕНА</th>${actions?'<th>ДЕЙСТВИЕ</th>':''}</tr>`;
             groups[groupName].forEach(s => {
-                html += `<tr><td>${escapeHtml(s.item)}</td><td>${escapeHtml(s.price)}</td>${actions?`<td><button class="btn warn small" onclick="event.stopPropagation();editSell(${s.id})">✎</button> <button class="btn danger small" onclick="event.stopPropagation();deleteSell(${s.id})">×</button></td>`:''}</tr>`;
+                html += `<tr class="catalog-row" data-search="${escapeHtml((s.item+' '+(s.group||'')).toLowerCase())}"><td>${escapeHtml(s.item)}</td><td>${escapeHtml(s.price)}</td>${actions?`<td><button class="btn warn small" onclick="event.stopPropagation();editSell(${s.id})">✎</button> <button class="btn danger small" onclick="event.stopPropagation();deleteSell(${s.id})">×</button></td>`:''}</tr>`;
             });
             html += `</table></div>`;
         });
@@ -1425,7 +1561,7 @@ function renderSell() {
         <div class="row">
             <div style="flex:2;min-width:200px;"><label>НАИМЕНОВАНИЕ:</label><input type="text" id="sellItem" required></div>
             <div style="flex:1;min-width:150px;"><label>ЦЕНА:</label><input type="text" id="sellPrice" required></div>
-            <div style="flex:1;min-width:150px;"><label>ГРУППА:</label><input type="text" id="sellGroup" required placeholder="напр. Снаряжение"></div>
+            <div style="flex:1;min-width:200px;"><label>КАТЕГОРИЯ:</label><select id="sellGroup" required>${SELL_CATEGORIES.map(g=>`<option value="${g}">${g}</option>`).join('')}</select></div>
         </div>
         <button type="submit" class="btn small">+ ДОБАВИТЬ</button></form></div>`;
     }
@@ -1557,8 +1693,13 @@ function editSell(id) {
     const s = sell.find(x => x.id === id); if (!s) return;
     const item = prompt("Товар:", s.item); if (item === null) return;
     const price = prompt("Цена:", s.price); if (price === null) return;
-    const group = prompt("Группа:", s.group); if (group === null) return;
-    s.item = item.trim()||s.item; s.price = price.trim()||s.price; s.group = group.trim()||s.group;
+    const categoryList = SELL_CATEGORIES.map((g,i)=>`${i+1}. ${g}`).join("\\n");
+    const currentCategory = normalizeSellCategory(s);
+    const choice = prompt(`Выберите категорию, введя номер:\\n${categoryList}`, String(SELL_CATEGORIES.indexOf(currentCategory)+1));
+    if (choice === null) return;
+    const categoryIndex = Number(choice)-1;
+    if (!Number.isInteger(categoryIndex) || categoryIndex < 0 || categoryIndex >= SELL_CATEGORIES.length) { alert("Некорректный номер категории."); return; }
+    s.item = item.trim()||s.item; s.price = price.trim()||s.price; s.group = SELL_CATEGORIES[categoryIndex];
     save(STORAGE.sell, sell); renderContent();
 }
 
@@ -1634,6 +1775,18 @@ function openAdmin() {
 }
 
 function renderAdmin() {
+    let ahtml = "";
+    if (!applications.length) ahtml = `<p class="text-warn">// Нет ожидающих заявок</p>`;
+    else {
+        ahtml = `<table style="font-size:12px;"><tr><th>ПОЗЫВНОЙ</th><th>ДАТА</th><th>РЕШЕНИЕ</th></tr>`;
+        applications.forEach(a => {
+            const date = a.submittedAt ? new Date(a.submittedAt).toLocaleString("ru-RU") : "—";
+            ahtml += `<tr><td>${escapeHtml(a.callsign)}</td><td>${escapeHtml(date)}</td><td><button class="btn small" onclick="reviewApplication(${Number(a.id)},true)">✓ ДОПУСТИТЬ</button> <button class="btn danger small" onclick="reviewApplication(${Number(a.id)},false)">× ОТКЛОНИТЬ</button></td></tr>`;
+        });
+        ahtml += `</table>`;
+    }
+    document.getElementById("adminApplicationsList").innerHTML = ahtml;
+
     let fhtml = `<table style="font-size:12px;"><tr><th>ПОЗЫВНОЙ</th><th>ПАРОЛЬ</th><th>РАНГ</th><th>СТАТУС</th><th>ДЕЙСТВИЕ</th></tr>`;
     fighters.forEach(f => { fhtml += `<tr><td>${escapeHtml(f.callsign)}</td><td>${escapeHtml(f.password)}</td><td>${escapeHtml(fighterRankLabel(f.rank))}</td><td>${escapeHtml(f.status)}</td><td><button class="btn danger small" onclick="removeFighter('${escapeHtml(f.callsign)}')">×</button></td></tr>`; });
     fhtml += `</table>`;

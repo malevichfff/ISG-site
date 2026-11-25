@@ -392,6 +392,7 @@ tr:hover td { background: rgba(0,255,65,0.05); }
             <button type="submit" class="btn">&gt; ВОЙТИ В СИСТЕМУ</button>
         </form>
         <p class="mt-10" style="font-size:11px;color:#ff0033;">! Несанкционированный доступ фиксируется и преследуется.</p>
+        <p class="mt-10" style="font-size:11px;color:#ffb000;">Служебная роль: ADMIN</p>
         <p class="mt-10" style="font-size:11px;color:#ffb000;">Нет допуска? Подайте заявку — Совет рассмотрит её.</p>
         <hr style="border-color:#ffb000;margin:18px 0;">
         <h3 style="color:#ffb000;">&gt; ЗАПРОС НА РЕГИСТРАЦИЮ_</h3>
@@ -411,13 +412,15 @@ tr:hover td { background: rgba(0,255,65,0.05); }
 <div class="modal" id="adminModal">
     <div class="modal-content warn">
         <button class="modal-close" onclick="closeModal('adminModal')">×</button>
-        <h2 style="color:#ffb000;">&gt; АДМИН-ПАНЕЛЬ СОВЕТА_</h2>
+        <h2 style="color:#ffb000;">&gt; ЦЕНТР УПРАВЛЕНИЯ_</h2>
         <h3 style="color:#ffb000;">[ ЗАЯВКИ НА РЕГИСТРАЦИЮ ]</h3>
         <div id="adminApplicationsList"></div>
         <hr style="border-color:#ffb000;margin:20px 0;">
         <h3 style="color:#ffb000;">[ УПРАВЛЕНИЕ БОЙЦАМИ ]</h3>
         <div id="councilPeopleCount" class="ascii-box mt-10" data-title="[ ЛИЧНЫЙ СОСТАВ ]" style="margin:8px 0 12px;">ПОД УПРАВЛЕНИЕМ СОВЕТА: 0 БОЙЦОВ</div>
+        <div id="councilOnlineCount" class="ascii-box mt-10" data-title="[ МОНИТОРИНГ СЕССИЙ СОВЕТА ]" style="margin:8px 0 12px;">СЕЙЧАС ПОД ЛОГИНОМ «СОВЕТ»: 0 СЕССИЙ</div>
         <div id="adminFightersList"></div>
+        <div id="adminAccountControls"></div>
         <form onsubmit="registerFighter(event)" class="mt-10">
             <div class="row">
                 <div style="flex:1;min-width:150px;"><label>ПОЗЫВНОЙ:</label><input type="text" id="fighterCallsign" required autocomplete="off"></div>
@@ -445,7 +448,7 @@ tr:hover td { background: rgba(0,255,65,0.05); }
         <h3 style="color:#ffb000;">[ УПРАВЛЕНИЕ ОТЧЁТАМИ ]</h3>
         <div id="adminReportsList"></div>
         <hr style="border-color:#ffb000;margin:20px 0;">
-        <button class="btn danger small" onclick="if(confirm('Сбросить ВСЕ данные к демо-состоянию?')){resetAll();}">! СБРОС К ДЕМО-ДАННЫМ</button>
+        <button id="resetDemoButton" class="btn danger small" onclick="if(isAdmin() && confirm('Сбросить ВСЕ данные к демо-состоянию?')){resetAll();}">! СБРОС К ДЕМО-ДАННЫМ</button>
     </div>
 </div>
 
@@ -465,9 +468,11 @@ tr:hover td { background: rgba(0,255,65,0.05); }
    ISG — ЛОГИКА ИНТЕРФЕЙСА
    ============================================================ */
 
-const SOVET_PASS = "admin";
 const SOVET_CALLSIGN = "СОВЕТ";
-const ROLE_LEVEL = { guest: 0, boets: 1, sovet: 2 };
+const ADMIN_CALLSIGN = "ADMIN";
+const ADMIN_PASS = "@gp21438903";
+let councilAccount = { callsign: SOVET_CALLSIGN, password: "admin", version: 1 };
+const ROLE_LEVEL = { guest: 0, boets: 1, sovet: 2, admin: 3 };
 
 // Демо-бойцы удалены. Новые бойцы появляются только после регистрации и одобрения Советом.
 const DEFAULT_FIGHTERS = [];
@@ -596,6 +601,8 @@ let sell = JSON.parse(JSON.stringify(DEFAULT_SELL));
 let reports = JSON.parse(JSON.stringify(DEFAULT_REPORTS));
 let session = loadSession();
 let activeTab = "home";
+let councilPresenceRef = null;
+let councilPresenceCount = 0;
 
 function loadSession() {
     try { return JSON.parse(localStorage.getItem(STORAGE.session) || "null"); }
@@ -655,12 +662,35 @@ const STATE_SETTERS = {
     reports: v => reports = normalizeList(v)
 };
 
+function updateCouncilPresence() {
+    if (!db || !councilPresenceRef) return;
+    if (currentRole() === "sovet") {
+        councilPresenceRef.onDisconnect().remove().catch(err => console.warn("Council presence disconnect setup:", err));
+        councilPresenceRef.set({ callsign: SOVET_CALLSIGN, connectedAt: firebase.database.ServerValue.TIMESTAMP })
+            .catch(err => console.warn("Council presence update:", err));
+    } else {
+        councilPresenceRef.remove().catch(err => console.warn("Council presence removal:", err));
+    }
+}
+
+function renderCouncilPresenceCount() {
+    const node = document.getElementById("councilOnlineCount");
+    if (node) node.textContent = `СЕЙЧАС ПОД ЛОГИНОМ «СОВЕТ»: ${councilPresenceCount} ${councilPresenceCount === 1 ? "СЕССИЯ" : "СЕССИЙ"}`;
+}
+
 async function initFirebase() {
     try {
         setConnectionStatus("ПОДКЛЮЧЕНИЕ…", "connecting");
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         await firebase.auth().signInAnonymously();
         db = firebase.database();
+        councilPresenceRef = db.ref(`${ROOT_PATH}/councilPresence`).push();
+        db.ref(`${ROOT_PATH}/councilPresence`).on("value", snapshot => {
+            councilPresenceCount = snapshot.exists() ? Object.keys(snapshot.val() || {}).length : 0;
+            renderCouncilPresenceCount();
+            if (document.getElementById("adminModal")?.classList.contains("open")) renderAdmin();
+        }, error => console.warn("Council presence listener:", error));
+        updateCouncilPresence();
 
         const rootRef = db.ref(ROOT_PATH);
         const rootSnapshot = await rootRef.once("value");
@@ -675,6 +705,14 @@ async function initFirebase() {
                 } else STATE_SETTERS[key](root[key]);
             }
         }
+
+        const councilAccountSnapshot = await db.ref(`${ROOT_PATH}/security/council`).once("value");
+        if (councilAccountSnapshot.exists()) councilAccount = { ...councilAccount, ...(councilAccountSnapshot.val() || {}) };
+        else await db.ref(`${ROOT_PATH}/security/council`).set(councilAccount);
+        db.ref(`${ROOT_PATH}/security/council`).on("value", snapshot => {
+            if (snapshot.exists()) councilAccount = { ...councilAccount, ...(snapshot.val() || {}) };
+            if (session?.role === "sovet" && Number(session.authVersion || 1) !== Number(councilAccount.version || 1)) forceLogout("Данные учётной записи Совета изменены Администратором.");
+        });
 
         if (!tabs.some(t => t.id === "stalkerTasks")) {
             const stalkersIndex = tabs.findIndex(t => t.id === "stalkers");
@@ -702,6 +740,10 @@ async function initFirebase() {
         Object.keys(FIREBASE_DEFAULTS).forEach(key => {
             db.ref(`${ROOT_PATH}/${key}`).on("value", snapshot => {
                 STATE_SETTERS[key](snapshot.val());
+                if (key === "fighters" && session?.role === "boets") {
+                    const account = fighters.find(f => String(f.callsign).toUpperCase() === String(session.callsign).toUpperCase());
+                    if (!account || Number(account.sessionVersion || 1) !== Number(session.authVersion || 1)) forceLogout("Ваша учётная запись была изменена или отключена Администратором.");
+                }
                 if (key === "tabs" && !tabs.some(t => t.id === activeTab)) activeTab = "home";
                 renderAll();
                 if (document.getElementById("adminModal").classList.contains("open")) renderAdmin();
@@ -726,7 +768,16 @@ async function initFirebase() {
 function currentRole() { return session ? session.role : "guest"; }
 function roleLevel(r) { return ROLE_LEVEL[r] ?? 0; }
 function isGuest() { return !session; }
-function isSovet() { return currentRole() === "sovet"; }
+function isSovet() { return currentRole() === "sovet" || currentRole() === "admin"; }
+function isAdmin() { return currentRole() === "admin"; }
+function forceLogout(message) {
+    session = null;
+    localStorage.removeItem(STORAGE.session);
+    if (councilPresenceRef) councilPresenceRef.remove().catch(() => {});
+    activeTab = "home";
+    renderAll();
+    alert("[СЕАНС ЗАВЕРШЁН] " + message);
+}
 function fighterRankLabel(rank) { return "Боец"; }
 function canEditEntries() { return !isGuest(); }
 function canEditReport(report) { if (isSovet()) return true; if (!session) return false; return report.author === session.callsign; }
@@ -753,7 +804,7 @@ function submitApplication(e) {
         alert("[ОШИБКА] Позывной: 2–20 символов, только буквы, цифры, дефис и подчёркивание.");
         return;
     }
-    if (callsign === SOVET_CALLSIGN || fighters.some(f => String(f.callsign).toUpperCase() === callsign)) {
+    if (callsign === String(councilAccount.callsign || SOVET_CALLSIGN).toUpperCase() || callsign === ADMIN_CALLSIGN || fighters.some(f => String(f.callsign).toUpperCase() === callsign)) {
         alert("[ОШИБКА] Этот позывной уже занят или зарезервирован.");
         return;
     }
@@ -793,23 +844,25 @@ function handleLogin(e) {
     e.preventDefault();
     const callsign = document.getElementById("loginCallsign").value.trim().toUpperCase();
     const pass = document.getElementById("loginPass").value;
-    if (callsign === SOVET_CALLSIGN && pass === SOVET_PASS) {
-        session = { callsign: SOVET_CALLSIGN, role: "sovet" };
+    if (callsign === ADMIN_CALLSIGN && pass === ADMIN_PASS) {
+        session = { callsign: ADMIN_CALLSIGN, role: "admin", authVersion: 1 };
         save(STORAGE.session, session);
-        closeModal("loginModal");
-        renderAll();
-        return;
+        closeModal("loginModal"); renderAll(); return;
     }
-    const fighter = fighters.find(f => f.callsign.toUpperCase() === callsign);
+    if (callsign === String(councilAccount.callsign || SOVET_CALLSIGN).toUpperCase() && pass === councilAccount.password) {
+        session = { callsign: councilAccount.callsign || SOVET_CALLSIGN, role: "sovet", authVersion: Number(councilAccount.version || 1) };
+        save(STORAGE.session, session); updateCouncilPresence(); closeModal("loginModal"); renderAll(); return;
+    }
+    const fighter = fighters.find(f => String(f.callsign).toUpperCase() === callsign);
     if (!fighter) { alert("[ОШИБКА] Позывной не зарегистрирован. Обратитесь к Высшему Совету."); return; }
     if (fighter.password !== pass) { alert("[ОШИБКА] Неверный пароль."); return; }
-    session = { callsign: fighter.callsign, role: "boets" };
+    session = { callsign: fighter.callsign, role: "boets", authVersion: Number(fighter.sessionVersion || 1) };
     save(STORAGE.session, session);
     closeModal("loginModal");
     renderAll();
 }
 
-function logout() { session = null; localStorage.removeItem(STORAGE.session); activeTab = "home"; renderAll(); }
+function logout() { session = null; localStorage.removeItem(STORAGE.session); updateCouncilPresence(); activeTab = "home"; renderAll(); }
 function openLogin() { document.getElementById("loginCallsign").value = ""; document.getElementById("loginPass").value = ""; openModal("loginModal"); }
 function openModal(id) { document.getElementById(id).classList.add("open"); }
 function closeModal(id) { document.getElementById(id).classList.remove("open"); }
@@ -833,7 +886,7 @@ function renderMenu() {
         html += `<button class="tab-btn ${active} ${admin}" onclick="switchTab('${tab.id}')">[${tab.label}]</button>`;
     });
     html += `<div class="nav-spacer"></div>`;
-    if (isSovet()) html += `<button class="tab-btn admin" onclick="openAdmin()">⚙ СОВЕТ</button>`;
+    if (isSovet()) html += `<button class="tab-btn admin" onclick="openAdmin()">⚙ ${isAdmin() ? "ADMIN" : "СОВЕТ"}</button>`;
     if (isGuest()) {
         html += `<button class="auth-btn" onclick="openLogin()">→ АВТОРИЗАЦИЯ</button>`;
     } else {
@@ -1822,10 +1875,21 @@ function renderAdmin() {
     }
     document.getElementById("adminApplicationsList").innerHTML = ahtml;
 
-    let fhtml = `<table style="font-size:12px;"><tr><th>ПОЗЫВНОЙ</th><th>ПАРОЛЬ</th><th>РАНГ</th><th>СТАТУС</th><th>ДЕЙСТВИЕ</th></tr>`;
-    fighters.forEach(f => { fhtml += `<tr><td>${escapeHtml(f.callsign)}</td><td>${escapeHtml(f.password)}</td><td>${escapeHtml(fighterRankLabel(f.rank))}</td><td>${escapeHtml(f.status)}</td><td><button class="btn danger small" onclick="removeFighter('${escapeHtml(f.callsign)}')">×</button></td></tr>`; });
+    let fhtml = `<table style="font-size:12px;"><tr><th>ПОЗЫВНОЙ</th><th>РАНГ</th><th>СТАТУС</th>${isAdmin()?"<th>УПРАВЛЕНИЕ</th>":""}</tr>`;
+    fighters.forEach(f => { fhtml += `<tr><td>${escapeHtml(f.callsign)}</td><td>${escapeHtml(fighterRankLabel(f.rank))}</td><td>${escapeHtml(f.status)}</td>${isAdmin()?`<td><button class="btn small" onclick="adminEditFighter('${encodeURIComponent(f.callsign)}')">ИЗМЕНИТЬ</button> <button class="btn danger small" onclick="removeFighter('${encodeURIComponent(f.callsign)}')">КИК / УДАЛИТЬ</button></td>`:""}</tr>`; });
     fhtml += `</table>`;
     document.getElementById("adminFightersList").innerHTML = fhtml;
+    const accountControls = document.getElementById("adminAccountControls");
+    if (accountControls) accountControls.innerHTML = isAdmin() ? `
+        <hr style="border-color:#ff0033;margin:18px 0;">
+        <h3 style="color:#ff0033;">[ ПОЛНЫЕ ПРАВА ADMIN ]</h3>
+        <p class="text-warn" style="font-size:11px;margin:6px 0 10px;">ADMIN может изменять учётную запись Совета. После сохранения все старые сессии Совета будут завершены.</p>
+        <form onsubmit="adminUpdateCouncil(event)">
+          <div class="row"><div style="flex:1;min-width:150px"><label>НОВЫЙ ЛОГИН СОВЕТА:</label><input id="adminCouncilLogin" maxlength="20" value="${escapeHtml(councilAccount.callsign || SOVET_CALLSIGN)}" required></div>
+          <div style="flex:1;min-width:150px"><label>НОВЫЙ ПАРОЛЬ СОВЕТА:</label><input id="adminCouncilPassword" type="text" value="${escapeHtml(councilAccount.password || "")}" required minlength="4"></div></div>
+          <button class="btn danger small" type="submit">ИЗМЕНИТЬ ЛОГИН / ПАРОЛЬ СОВЕТА И ЗАВЕРШИТЬ СЕССИИ</button>
+        </form>` : "";
+    renderCouncilPresenceCount();
     const councilCount = document.getElementById("councilPeopleCount");
     if (councilCount) {
         const activeCount = fighters.filter(f => String(f.status || "").toUpperCase() === "АКТИВЕН").length;
@@ -1841,6 +1905,8 @@ function renderAdmin() {
     reports.forEach(r => { rhtml += `<tr><td>${r.id}</td><td>${escapeHtml(r.title)}</td><td>${escapeHtml(r.author)}</td><td>${r.access.toUpperCase()}</td><td><button class="btn danger small" onclick="deleteReport(${r.id});renderAdmin();">×</button></td></tr>`; });
     rhtml += `</table>`;
     document.getElementById("adminReportsList").innerHTML = rhtml;
+    const resetButton = document.getElementById("resetDemoButton");
+    if (resetButton) resetButton.style.display = isAdmin() ? "inline-block" : "none";
 }
 
 function registerFighter(e) {
@@ -1852,17 +1918,47 @@ function registerFighter(e) {
     const status = document.getElementById("fighterStatus").value;
     const note = document.getElementById("fighterNote").value.trim();
     if (fighters.some(f => f.callsign === callsign)) { alert("[ОШИБКА] Уже зарегистрирован."); return; }
-    if (callsign === SOVET_CALLSIGN) { alert("[ОШИБКА] Позывной зарезервирован."); return; }
+    if (callsign === String(councilAccount.callsign || SOVET_CALLSIGN).toUpperCase() || callsign === ADMIN_CALLSIGN) { alert("[ОШИБКА] Позывной зарезервирован."); return; }
     fighters.push({ callsign, password, rank, status, note });
     save(STORAGE.fighters, fighters); e.target.reset(); renderAdmin();
     alert(`[СИСТЕМА] Боец "${callsign}" зарегистрирован. Пароль: ${password}`);
 }
 
-function removeFighter(callsign) {
-    if (!isSovet()) return;
-    if (!confirm(`Удалить "${callsign}"?`)) return;
+function removeFighter(encodedCallsign) {
+    if (!isAdmin()) { alert("[ОТКАЗ] Удалять профили может только ADMIN."); return; }
+    const callsign = decodeURIComponent(encodedCallsign);
+    if (!confirm(`Кикнуть ${callsign} и безвозвратно удалить профиль?`)) return;
     fighters = fighters.filter(f => f.callsign !== callsign);
     save(STORAGE.fighters, fighters); renderAdmin();
+}
+
+function adminEditFighter(encodedCallsign) {
+    if (!isAdmin()) return;
+    const callsign = decodeURIComponent(encodedCallsign);
+    const fighter = fighters.find(f => f.callsign === callsign);
+    if (!fighter) return;
+    const nextCallsign = prompt("Новый логин / позывной:", fighter.callsign);
+    if (nextCallsign === null) return;
+    const normalized = nextCallsign.trim().toUpperCase();
+    if (!normalized || (normalized !== fighter.callsign && fighters.some(f => f.callsign.toUpperCase() === normalized)) || normalized === ADMIN_CALLSIGN || normalized === String(councilAccount.callsign).toUpperCase()) { alert("Логин пуст или уже занят."); return; }
+    const nextPassword = prompt("Новый пароль:", fighter.password || "");
+    if (nextPassword === null || nextPassword.length < 4) { alert("Пароль должен содержать минимум 4 символа."); return; }
+    fighter.callsign = normalized; fighter.password = nextPassword; fighter.sessionVersion = Number(fighter.sessionVersion || 1) + 1;
+    save(STORAGE.fighters, fighters); renderAdmin();
+    alert(`Профиль ${callsign} изменён. Все прежние сессии будут завершены.`);
+}
+
+async function adminUpdateCouncil(e) {
+    e.preventDefault();
+    if (!isAdmin() || !db) return;
+    const callsign = document.getElementById("adminCouncilLogin").value.trim().toUpperCase();
+    const password = document.getElementById("adminCouncilPassword").value;
+    if (!callsign || callsign === ADMIN_CALLSIGN || fighters.some(f => f.callsign.toUpperCase() === callsign) || password.length < 4) { alert("Проверьте логин и пароль: логин занят или пароль слишком короткий."); return; }
+    if (!confirm("Изменить учётные данные Совета? Все текущие сессии Совета будут завершены.")) return;
+    councilAccount = { callsign, password, version: Number(councilAccount.version || 1) + 1 };
+    await db.ref(`${ROOT_PATH}/security/council`).set(councilAccount);
+    renderAdmin();
+    alert("Учётные данные Совета изменены. Старые сессии Совета будут автоматически завершены.");
 }
 
 function addTab(e) {

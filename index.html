@@ -1211,6 +1211,7 @@ function deleteTrusted(id) {
 // ===== АРТЕФАКТЫ =====
 const ARTIFACT_TYPES = ["Термические", "Гравитационные", "Химические", "Электрические"];
 let activeArtifactType = "Все";
+let artifactSearchTerm = "";
 
 function normalizeArtifactType(a) {
     if (ARTIFACT_TYPES.includes(a.type)) return a.type;
@@ -1231,10 +1232,23 @@ function setArtifactType(type) {
     renderContent();
 }
 
+function filterArtifacts() {
+    const input = document.getElementById("artifactSearch");
+    artifactSearchTerm = input ? input.value : "";
+    const cursor = input ? input.selectionStart : null;
+    renderContent();
+    const nextInput = document.getElementById("artifactSearch");
+    if (nextInput) {
+        nextInput.focus();
+        if (cursor !== null) nextInput.setSelectionRange(cursor, cursor);
+    }
+}
+
 function renderArtifacts() {
     artifacts.forEach(normalizeArtifactType);
     let html = `<h1>&gt; БАЗА ДАННЫХ АРТЕФАКТОВ_</h1>
     <p class="text-warn" style="font-size:12px;">// Каталог разделён по типам аномалий. Положительные значения — зелёные, отрицательные — красные.</p>
+    <div class="form-block"><label>ПОИСК АРТЕФАКТА:</label><input type="search" id="artifactSearch" value="${escapeHtml(artifactSearchTerm)}" placeholder="Введите название артефакта..." oninput="filterArtifacts()"></div>
     <div class="row mb-10" style="gap:8px;">
         <button class="btn small ${activeArtifactType === 'Все' ? '' : 'warn'}" onclick="setArtifactType('Все')">ВСЕ (${artifacts.length})</button>`;
     ARTIFACT_TYPES.forEach(type => {
@@ -1243,12 +1257,14 @@ function renderArtifacts() {
     });
     html += `</div>`;
 
-    const visibleArtifacts = activeArtifactType === "Все"
-        ? artifacts
-        : artifacts.filter(a => normalizeArtifactType(a) === activeArtifactType);
+    const search = artifactSearchTerm.trim().toLocaleLowerCase("ru");
+    const visibleArtifacts = artifacts.filter(a =>
+        (activeArtifactType === "Все" || normalizeArtifactType(a) === activeArtifactType) &&
+        (!search || String(a.name || "").toLocaleLowerCase("ru").includes(search))
+    );
 
     if (visibleArtifacts.length === 0) {
-        html += `<p class="text-warn">// В этой категории артефактов нет</p>`;
+        html += `<p class="text-warn">// ${search ? "По запросу ничего не найдено" : "В этой категории артефактов нет"}</p>`;
     } else {
         const actions = canEditEntries();
         ARTIFACT_TYPES.filter(type => activeArtifactType === "Все" || activeArtifactType === type).forEach(type => {

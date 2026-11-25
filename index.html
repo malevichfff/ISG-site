@@ -477,19 +477,13 @@ const ROLE_LEVEL = { guest: 0, boets: 1, sovet: 2, admin: 3 };
 const DEFAULT_FIGHTERS = [];
 const DEMO_FIGHTER_CALLSIGNS = ["ВОРОН-7", "ЛИСА", "ШТОРМ"];
 
-const DEFAULT_STALKERS = [
-    { id: 1, callsign: "БРОДЯГА", rank: "1", status: "В БАРЕРЕ", birthDate: "1995-03-15", note: "Новобранец.", photo: "" },
-    { id: 2, callsign: "МЕХАНИК", rank: "2", status: "АКТИВЕН", birthDate: "1988-07-22", note: "Специалист по технике.", photo: "" },
-    { id: 3, callsign: "КРОТ", rank: "3", status: "ПРОПАЛ", birthDate: "1982-11-08", note: "Поиск ведётся.", photo: "" }
-];
-
+// Демо-списки сталкеров и доверенных удалены.
+const DEFAULT_STALKERS = [];
+const DEMO_STALKER_CALLSIGNS = ["БРОДЯГА", "МЕХАНИК", "КРОТ"];
 const DEFAULT_STALKER_TASKS = [];
 const DEFAULT_MUTANT_DATABASE = [];
-
-const DEFAULT_TRUSTED = [
-    { id: 1, callsign: "ПРИЗРАК", status: "АКТИВЕН", birthDate: "1975-05-30", note: "Высший уровень доверия.", photo: "" },
-    { id: 2, callsign: "ДОК", status: "АКТИВЕН", birthDate: "1980-09-12", note: "Полевой хирург.", photo: "" }
-];
+const DEFAULT_TRUSTED = [];
+const DEMO_TRUSTED_CALLSIGNS = ["ПРИЗРАК", "ДОК"];
 
 const DEFAULT_BUY = [
     { id: 1, item: "Аномальный кристалл (3 ед.)", price: "4500 руб." },
@@ -641,7 +635,9 @@ const STATE_SETTERS = {
         !DEMO_FIGHTER_CALLSIGNS.includes(String(f.callsign || "").trim().toUpperCase())
     ),
     applications: v => applications = normalizeList(v),
-    stalkers: v => stalkers = normalizeList(v).map(s => ({
+    stalkers: v => stalkers = normalizeList(v).filter(s =>
+        !DEMO_STALKER_CALLSIGNS.includes(String(s.callsign || "").trim().toUpperCase())
+    ).map(s => ({
         ...s,
         rank: /^[1-5]$/.test(String(s.rank || "")) ? String(s.rank) : "1",
         status: ["АКТИВЕН", "ПРОПАЛ", "МЁРТВ"].includes(String(s.status || "").toUpperCase())
@@ -650,7 +646,9 @@ const STATE_SETTERS = {
     })),
     stalkerTasks: v => stalkerTasks = normalizeList(v),
     mutantDatabase: v => mutantDatabase = normalizeList(v),
-    trusted: v => trusted = normalizeList(v),
+    trusted: v => trusted = normalizeList(v).filter(t =>
+        !DEMO_TRUSTED_CALLSIGNS.includes(String(t.callsign || "").trim().toUpperCase())
+    ),
     artifacts: v => artifacts = normalizeList(v),
     buy: v => buy = normalizeList(v).map(x => ({ ...x, price: String(x.price || "").replace(/у\.е\.?/gi, "руб.") })),
     sell: v => sell = normalizeList(v).map(x => ({ ...x, price: String(x.price || "").replace(/у\.е\.?/gi, "руб.") })),
@@ -724,6 +722,27 @@ async function initFirebase() {
             const stalkersIndex = tabs.findIndex(t => t.id === "stalkerTasks");
             tabs.splice(stalkersIndex >= 0 ? stalkersIndex + 1 : tabs.length, 0, { id: "mutantDatabase", label: "БАЗА МУТАНТОВ", minRole: "boets" });
             await db.ref(`${ROOT_PATH}/tabs`).set(tabs);
+        }
+
+        // Удаляем демо-сталкеров и демо-доверенных из уже существующей базы Firebase.
+        const storedStalkersSnapshot = await db.ref(`${ROOT_PATH}/stalkers`).once("value");
+        const storedStalkers = normalizeList(storedStalkersSnapshot.val());
+        const realStalkers = storedStalkers.filter(s =>
+            !DEMO_STALKER_CALLSIGNS.includes(String(s.callsign || "").trim().toUpperCase())
+        );
+        if (realStalkers.length !== storedStalkers.length) {
+            await db.ref(`${ROOT_PATH}/stalkers`).set(realStalkers);
+            stalkers = realStalkers;
+        }
+
+        const storedTrustedSnapshot = await db.ref(`${ROOT_PATH}/trusted`).once("value");
+        const storedTrusted = normalizeList(storedTrustedSnapshot.val());
+        const realTrusted = storedTrusted.filter(t =>
+            !DEMO_TRUSTED_CALLSIGNS.includes(String(t.callsign || "").trim().toUpperCase())
+        );
+        if (realTrusted.length !== storedTrusted.length) {
+            await db.ref(`${ROOT_PATH}/trusted`).set(realTrusted);
+            trusted = realTrusted;
         }
 
         // Удаляем старые демо-аккаунты из уже существующей базы Firebase.

@@ -547,11 +547,7 @@ const DEFAULT_ARTIFACTS = [
     }
 ];
 
-const DEFAULT_REPORTS = [
-    { id: 1, title: "Выход в Зону-0", author: "ЛИСА", role: "boets", access: "boets", date: "2026-11-22", text: "Обследован периметр объекта «Чёрный обелиск».\nОхрана — 4 единицы.\nРекомендую повторный выход через 72 часа." },
-    { id: 2, title: "Отчёт по кристаллам", author: "ВОРОН-7", role: "boets", access: "boets", date: "2026-11-20", text: "Доставленные образцы проходят проверку.\nУровень аномалии 3 по шкале ISG." },
-    { id: 3, title: "СОВЕРШЕННО СЕКРЕТНО: Операция «Тишина»", author: "ВЫСШИЙ СОВЕТ", role: "sovet", access: "sovet", date: "2026-11-18", text: "Только для членов Совета.\nЛиквидация ячейки в Секторе-4." }
-];
+const DEFAULT_REPORTS = [];
 
 const DEFAULT_TABS = [
     { id: "home", label: "ГЛАВНАЯ", minRole: "guest" },
@@ -658,7 +654,12 @@ const STATE_SETTERS = {
     artifacts: v => artifacts = normalizeList(v),
     buy: v => buy = normalizeList(v).map(x => ({ ...x, price: String(x.price || "").replace(/у\.е\.?/gi, "руб.") })),
     sell: v => sell = normalizeList(v).map(x => ({ ...x, price: String(x.price || "").replace(/у\.е\.?/gi, "руб.") })),
-    reports: v => reports = normalizeList(v)
+    reports: v => {
+        const loadedReports = normalizeList(v);
+        const demoTitles = ["Выход в Зону-0", "Отчёт по кристаллам", "СОВЕРШЕННО СЕКРЕТНО: Операция «Тишина»"];
+        reports = loadedReports.filter(r => !demoTitles.includes(String(r.title || "").trim()));
+        if (reports.length !== loadedReports.length) save(STORAGE.reports, reports);
+    }
 };
 
 function updateCouncilPresence() {

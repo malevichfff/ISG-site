@@ -1362,32 +1362,23 @@ async function imageFileToDataUrl(file) {
 
 async function recognizeArtifactFromPhoto(imageDataUrl) {
     const response = await fetch(getArtifactAIEndpoint(), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image: imageDataUrl })
     });
     if (!response.ok) {
-        let detail = "";
-        try { detail = (await response.json()).error || ""; } catch (_) {}
+        let detail = ""; try { detail = (await response.json()).error || ""; } catch (_) {}
         throw new Error(detail || `ИИ-сервер вернул ошибку ${response.status}`);
     }
     const result = await response.json();
     const allowedStats = ["stamina", "weight", "chemProtection", "gravProtection", "thermProtection", "elecProtection", "blood", "health", "radiation", "meleeProtection", "biteProtection", "hunger", "thirst", "shock"];
-    if (typeof result.name !== "string" || !result.name.trim() || !result.stats || typeof result.stats !== "object")
-        throw new Error("ИИ не смог прочитать название или характеристики. Попробуйте загрузить более чёткую фотографию.");
-    // Сохраняем только характеристики, которые сервер явно вернул числом.
-    // Отсутствующие поля не превращаем в нули: настоящий 0 остаётся видимым.
+    if (typeof result.name !== "string" || !result.name.trim() || !ARTIFACT_RARITIES.includes(result.rarity) || !result.stats || typeof result.stats !== "object")
+        throw new Error("ИИ не смог достоверно прочитать название или редкость. Проверьте фотографию.");
     const detectedStats = {};
     allowedStats.forEach(key => {
-        if (Object.prototype.hasOwnProperty.call(result.stats, key) &&
-            result.stats[key] !== null && result.stats[key] !== "" &&
-            Number.isFinite(Number(result.stats[key]))) {
-            detectedStats[key] = Number(result.stats[key]);
-        }
+        if (Object.prototype.hasOwnProperty.call(result.stats, key) && result.stats[key] !== null &&
+            result.stats[key] !== "" && Number.isFinite(Number(result.stats[key]))) detectedStats[key] = Number(result.stats[key]);
     });
-    if (!Object.keys(detectedStats).length)
-        throw new Error("ИИ не распознал ни одной характеристики на фотографии.");
-    return { name: result.name, stats: detectedStats };
+    return { name: result.name.trim(), rarity: result.rarity, stats: detectedStats };
 }
 
 let activeArtifactType = "Все";
@@ -1519,11 +1510,12 @@ function renderArtifacts() {
         <p class="text-warn" style="font-size:11px;">Загрузите чёткую фотографию, на которой хорошо видны название и все характеристики. ИИ перепишет их с изображения, не придумывая новые.</p>
         <label>ТИП АРТЕФАКТА (ВЫБИРАЕТ ИГРОК):</label>
         <select id="artType" required>${ARTIFACT_TYPES.map(type => `<option value="${type}">${type}</option>`).join('')}</select>
-        <label>РЕДКОСТЬ (ВЫБИРАЕТ ИГРОК):</label>
-        <select id="artRarity" required>${ARTIFACT_RARITIES.map(rarity => `<option value="${rarity}">${rarity}</option>`).join('')}</select>
+        <label>РЕДКОСТЬ (ОПРЕДЕЛЯЕТ MISTRAL ПО ФОТО):</label>
+        <input id="artRarityPreview" type="text" value="Определится после анализа" readonly>
+        <input type="hidden" id="artRarity" value="Обычный">
         <label>ЦЕНА АРТЕФАКТА (РУБ.):</label>
         <input type="number" id="artPrice" min="0" step="1" value="0" required>
-        <p class="text-warn" style="font-size:11px;">ИИ распознаёт название и переписывает характеристики с фотографии. Тип, редкость и цену выбирает игрок.</p>
+        <p class="text-warn" style="font-size:11px;">ИИ считывает название, редкость и только видимые свойства. Тип и цену указывает игрок; отсутствующие свойства пропускаются.</p>
         <button type="submit" class="btn small mt-10">+ ДОБАВИТЬ АРТЕФАКТ</button></form></div></div>`;
     }
     return html;
@@ -1533,30 +1525,37 @@ async function addArtifact(e) {
     e.preventDefault();
     if (!canEditEntries()) return;
     const submitButton = e.submitter || document.querySelector('#content_artifact_add_form button[type="submit"]');
-    if (submitButton) { submitButton.disabled = true; submitButton.textContent = "ИИ ОЦЕНИВАЕТ..."; }
-    const newId = artifacts.length ? Math.max(...artifacts.map(x=>x.id))+1 : 1;
-    const newArtifact = {
-        id: newId,
-        name: "",
-        type: document.getElementById("artType").value,
-        rarity: document.getElementById("artRarity").value,
-        price: Math.max(0, parseFloat(document.getElementById("artPrice").value) || 0)
-    };
+    if (submitButton) { submitButton.disabled = true; submitButton.textContent = "MISTRAL АНАЛИЗИРУЕТ..."; }
     try {
         const photoFile = document.getElementById("artPhoto").files[0];
         if (!photoFile) throw new Error("Сначала загрузите фотографию артефакта.");
         const imageDataUrl = await imageFileToDataUrl(photoFile);
         const ai = await recognizeArtifactFromPhoto(imageDataUrl);
-        newArtifact.name = ai.name.trim();
-        newArtifact.photo = imageDataUrl;
-        Object.assign(newArtifact, ai.stats);
-        newArtifact.recognizedStats = Object.keys(ai.stats);
+        const rarityInput = document.getElementById("artRarity");
+        const rarityPreview = document.getElementById("artRarityPreview");
+        if (rarityInput) rarityInput.value = ai.rarity;
+        if (rarityPreview) rarityPreview.value = ai.rarity;
+        const statLines = ARTIFACT_STAT_FIELDS.filter(([key]) => Object.prototype.hasOwnProperty.call(ai.stats, key))
+            .map(([key,label,suffix]) => label + ": " + ai.stats[key] + suffix);
+        const summary = "Название: " + ai.name + "\nРедкость: " + ai.rarity +
+            "\nСвойства:\n" + (statLines.length ? statLines.join("\n") : "На фотографии свойства не обнаружены — поля будут пропущены.") +
+            "\n\nТип (выбран игроком): " + document.getElementById("artType").value +
+            "\nЦена (установлена игроком): " + (Math.max(0, parseFloat(document.getElementById("artPrice").value) || 0)) + " руб." +
+            "\n\nДобавить артефакт в базу?";
+        if (!confirm(summary)) return;
+        const newId = artifacts.length ? Math.max(...artifacts.map(x=>x.id))+1 : 1;
+        const newArtifact = {
+            id: newId, name: ai.name, type: document.getElementById("artType").value,
+            rarity: ai.rarity, price: Math.max(0, parseFloat(document.getElementById("artPrice").value) || 0),
+            photo: imageDataUrl, ...ai.stats, recognizedStats: Object.keys(ai.stats)
+        };
         artifacts.push(newArtifact);
         save(STORAGE.artifacts, artifacts);
         renderContent();
     } catch (error) {
-        alert("Не удалось получить оценку ИИ: " + error.message + "\nАртефакт не сохранён.");
-        if (submitButton) { submitButton.disabled = false; submitButton.textContent = "+ ДОБАВИТЬ АРТЕФАКТ"; }
+        alert("Не удалось распознать артефакт: " + error.message + "\nАртефакт не сохранён.");
+    } finally {
+        if (submitButton && document.contains(submitButton)) { submitButton.disabled = false; submitButton.textContent = "+ ДОБАВИТЬ АРТЕФАКТ"; }
     }
 }
 

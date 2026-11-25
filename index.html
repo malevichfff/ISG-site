@@ -188,6 +188,14 @@ tr:hover td { background: rgba(0,255,65,0.05); }
     position: relative;
 }
 
+.artifact-photo-wrap { position: relative; width: 100%; max-width: 320px; margin: 0 0 12px; }
+.artifact-photo { display: block; width: 100%; max-height: 240px; object-fit: contain; background: #050505; border: 1px solid rgba(255,176,0,0.55); }
+.artifact-rarity-badge { position: absolute; top: 8px; left: 8px; padding: 6px 10px; font-weight: bold; font-size: 12px; letter-spacing: .5px; color: #050505; background: #aaa; border: 1px solid rgba(255,255,255,.65); text-transform: uppercase; }
+.artifact-rarity-badge.rarity-Обычный { background: #45c46a; }
+.artifact-rarity-badge.rarity-Необычный { background: #42a5f5; }
+.artifact-rarity-badge.rarity-Редкий { background: #b16be0; }
+.artifact-rarity-badge.rarity-Легендарный { background: #ffd34d; }
+.artifact-rarity-badge.rarity-Мусорный { background: #888; }
 .artifact-card .artifact-name {
     color: #ffb000;
     font-weight: bold;
@@ -1328,11 +1336,35 @@ function getArtifactAIEndpoint() {
     return endpoint;
 }
 
-async function determineArtifactRarity(a) {
+async function imageFileToDataUrl(file) {
+    if (!file || !file.type.startsWith("image/")) throw new Error("Выберите файл изображения.");
+    if (file.size > 12 * 1024 * 1024) throw new Error("Фотография слишком большая. Максимум 12 МБ.");
+    return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error("Не удалось прочитать фотографию."));
+        reader.onload = () => {
+            const img = new Image();
+            img.onerror = () => reject(new Error("Не удалось открыть изображение."));
+            img.onload = () => {
+                const maxSide = 1400;
+                const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+                const canvas = document.createElement("canvas");
+                canvas.width = Math.max(1, Math.round(img.width * scale));
+                canvas.height = Math.max(1, Math.round(img.height * scale));
+                canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+                resolve(canvas.toDataURL("image/jpeg", 0.82));
+            };
+            img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+async function recognizeArtifactFromPhoto(imageDataUrl) {
     const response = await fetch(getArtifactAIEndpoint(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ artifact: a })
+        body: JSON.stringify({ image: imageDataUrl })
     });
     if (!response.ok) {
         let detail = "";
@@ -1341,10 +1373,11 @@ async function determineArtifactRarity(a) {
     }
     const result = await response.json();
     const requiredStats = ["stamina", "weight", "chemProtection", "gravProtection", "thermProtection", "elecProtection", "blood", "health", "radiation", "meleeProtection", "biteProtection", "hunger", "thirst", "shock"];
-    if (!ARTIFACT_RARITIES.includes(result.rarity) || typeof result.explanation !== "string" || !result.stats || requiredStats.some(key => !Number.isFinite(Number(result.stats[key]))))
-        throw new Error("ИИ вернул неполный набор характеристик или некорректную редкость. Попробуйте ещё раз.");
+    if (typeof result.name !== "string" || !result.name.trim() || !result.stats || requiredStats.some(key => !Number.isFinite(Number(result.stats[key]))))
+        throw new Error("ИИ не смог прочитать название или все характеристики. Попробуйте загрузить более чёткую фотографию.");
     return result;
 }
+
 let activeArtifactType = "Все";
 let artifactSearchTerm = "";
 
@@ -1410,9 +1443,9 @@ function renderArtifacts() {
             html += `<div class="group-header ${isCollapsed ? 'is-collapsed' : ''}" onclick="toggleGroup('${groupId}')" data-group-id="${groupId}"><span class="group-title">${type.toUpperCase()}</span><span class="group-count">${group.length} шт.</span><span class="group-toggle">${isCollapsed ? '+' : '−'}</span></div><div class="group-content ${isCollapsed ? 'collapsed' : ''}" id="content_${groupId}">`;
             group.forEach(a => {
                 html += `<div class="artifact-card">
+                    ${a.photo ? `<div class="artifact-photo-wrap"><img class="artifact-photo" src="${a.photo}" alt="${escapeHtml(a.name)}"><span class="artifact-rarity-badge rarity-${escapeHtml(a.rarity || 'Мусорный')}">${escapeHtml(a.rarity || 'Не указана')}</span></div>` : ''}
                     <div class="artifact-name">${escapeHtml(a.name)}</div>
-                    <div class="text-warn mb-10" style="font-size:11px;">ТИП: ${escapeHtml(normalizeArtifactType(a).toUpperCase())} · РЕДКОСТЬ: ${escapeHtml((a.aiRarity || "НЕ ОЦЕНЁН ИИ").toUpperCase())} · ЦЕНА: ${Number(a.price) || 0} руб.</div>
-                    ${a.aiExplanation ? `<p class="text-warn" style="font-size:11px;margin:0 0 10px;">ОЦЕНКА ИИ: ${escapeHtml(a.aiExplanation)}</p>` : ''}
+                    <div class="text-warn mb-10" style="font-size:11px;">ТИП: ${escapeHtml(normalizeArtifactType(a).toUpperCase())} · РЕДКОСТЬ: ${escapeHtml((a.rarity || "НЕ УКАЗАНА").toUpperCase())} · ЦЕНА: ${Number(a.price) || 0} руб.</div>
                     <div class="artifact-stats">
                         <div class="stat"><span class="stat-label">Стамина:</span><span class="stat-value ${a.stamina >= 0 ? 'positive' : 'negative'}">${a.stamina >= 0 ? '+' : ''}${a.stamina}</span></div>
                         <div class="stat"><span class="stat-label">Вес:</span><span class="stat-value">${a.weight} кг</span></div>
@@ -1442,13 +1475,16 @@ function renderArtifacts() {
     if (canEditEntries()) {
         const addArtifactCollapsed = collapsedGroups["artifact_add_form"] === true;
         html += `<div class="group-header ${addArtifactCollapsed ? 'is-collapsed' : ''}" onclick="toggleGroup('artifact_add_form')" data-group-id="artifact_add_form"><span class="group-title">ДОБАВИТЬ АРТЕФАКТ</span><span class="group-toggle">${addArtifactCollapsed ? '+' : '−'}</span></div><div class="group-content ${addArtifactCollapsed ? 'collapsed' : ''}" id="content_artifact_add_form"><div class="form-block mt-10"><form onsubmit="addArtifact(event)">
-        <label>НАЗВАНИЕ АРТЕФАКТА:</label>
-        <input type="text" id="artName" required>
-        <label>ТИП АРТЕФАКТА:</label>
+        <label>ФОТОГРАФИЯ АРТЕФАКТА:</label>
+        <input type="file" id="artPhoto" accept="image/*" required>
+        <p class="text-warn" style="font-size:11px;">Загрузите чёткую фотографию, на которой хорошо видны название и все характеристики. ИИ перепишет их с изображения, не придумывая новые.</p>
+        <label>ТИП АРТЕФАКТА (ВЫБИРАЕТ ИГРОК):</label>
         <select id="artType" required>${ARTIFACT_TYPES.map(type => `<option value="${type}">${type}</option>`).join('')}</select>
+        <label>РЕДКОСТЬ (ВЫБИРАЕТ ИГРОК):</label>
+        <select id="artRarity" required>${ARTIFACT_RARITIES.map(rarity => `<option value="${rarity}">${rarity}</option>`).join('')}</select>
         <label>ЦЕНА АРТЕФАКТА (РУБ.):</label>
         <input type="number" id="artPrice" min="0" step="1" value="0" required>
-        <p class="text-warn" style="font-size:11px;">ХАРАКТЕРИСТИКИ И РЕДКОСТЬ ПОЛНОСТЬЮ ОПРЕДЕЛЯЕТ ИИ ПО НАЗВАНИЮ И ТИПУ. ИГРОК УКАЗЫВАЕТ ТОЛЬКО НАЗВАНИЕ, ТИП И ЦЕНУ. После генерации характеристики появятся в карточке артефакта.</p>
+        <p class="text-warn" style="font-size:11px;">ИИ распознаёт название и переписывает характеристики с фотографии. Тип, редкость и цену выбирает игрок.</p>
         <button type="submit" class="btn small mt-10">+ ДОБАВИТЬ АРТЕФАКТ</button></form></div></div>`;
     }
     return html;
@@ -1462,15 +1498,19 @@ async function addArtifact(e) {
     const newId = artifacts.length ? Math.max(...artifacts.map(x=>x.id))+1 : 1;
     const newArtifact = {
         id: newId,
-        name: document.getElementById("artName").value.trim(),
+        name: "",
         type: document.getElementById("artType").value,
+        rarity: document.getElementById("artRarity").value,
         price: Math.max(0, parseFloat(document.getElementById("artPrice").value) || 0)
     };
     try {
-        const ai = await determineArtifactRarity(newArtifact);
+        const photoFile = document.getElementById("artPhoto").files[0];
+        if (!photoFile) throw new Error("Сначала загрузите фотографию артефакта.");
+        const imageDataUrl = await imageFileToDataUrl(photoFile);
+        const ai = await recognizeArtifactFromPhoto(imageDataUrl);
+        newArtifact.name = ai.name.trim();
+        newArtifact.photo = imageDataUrl;
         Object.assign(newArtifact, ai.stats);
-        newArtifact.aiRarity = ai.rarity;
-        newArtifact.aiExplanation = ai.explanation;
         artifacts.push(newArtifact);
         save(STORAGE.artifacts, artifacts);
         renderContent();
@@ -1485,26 +1525,16 @@ async function editArtifact(id) {
     const a = artifacts.find(x => x.id === id);
     if (!a) return;
     normalizeArtifactType(a);
-    const name = prompt("Название:", a.name); if (name === null) return;
     const type = prompt("Тип (Термические / Гравитационные / Химические / Электрические):", a.type); if (type === null) return;
     if (!ARTIFACT_TYPES.includes(type.trim())) { alert("Укажите один из четырёх типов: Термические, Гравитационные, Химические или Электрические."); return; }
+    const rarity = prompt("Редкость (Мусорный / Обычный / Необычный / Редкий / Легендарный):", a.rarity || "Обычный"); if (rarity === null) return;
+    if (!ARTIFACT_RARITIES.includes(rarity.trim())) { alert("Укажите одну из пяти редкостей."); return; }
     const price = prompt("Цена артефакта (руб.):", a.price ?? 0); if (price === null) return;
-    const updated = { ...a,
-        name: name.trim() || a.name,
-        type: type.trim(),
-        price: Math.max(0, parseFloat(price) || 0)
-    };
-    try {
-        const ai = await determineArtifactRarity(updated);
-        Object.assign(updated, ai.stats);
-        updated.aiRarity = ai.rarity;
-        updated.aiExplanation = ai.explanation;
-        Object.assign(a, updated);
-        save(STORAGE.artifacts, artifacts);
-        renderContent();
-    } catch (error) {
-        alert("Не удалось получить оценку ИИ: " + error.message + "\nИзменения не сохранены.");
-    }
+    a.type = type.trim();
+    a.rarity = rarity.trim();
+    a.price = Math.max(0, parseFloat(price) || 0);
+    save(STORAGE.artifacts, artifacts);
+    renderContent();
 }
 
 function deleteArtifact(id) {

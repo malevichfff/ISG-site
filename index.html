@@ -1314,6 +1314,37 @@ function deleteTrusted(id) {
 
 // ===== АРТЕФАКТЫ =====
 const ARTIFACT_TYPES = ["Термические", "Гравитационные", "Химические", "Электрические"];
+const ARTIFACT_RARITIES = ["Мусорный", "Обычный", "Необычный", "Редкий", "Легендарный"];
+// Настоящая оценка выполняется ИИ на сервере. Адрес Worker сохраняется в браузере.
+function getArtifactAIEndpoint() {
+    let endpoint = localStorage.getItem("isg_artifact_ai_endpoint") || "";
+    if (!endpoint) {
+        endpoint = prompt("Вставьте URL опубликованного ИИ-сервера (Cloudflare Worker). Его нужно настроить один раз на этом устройстве:");
+        if (!endpoint) throw new Error("ИИ-сервер не настроен. Сначала укажите URL Cloudflare Worker.");
+        endpoint = endpoint.trim();
+        if (!/^https:\/\//i.test(endpoint)) throw new Error("URL ИИ-сервера должен начинаться с https://");
+        localStorage.setItem("isg_artifact_ai_endpoint", endpoint);
+    }
+    return endpoint;
+}
+
+async function determineArtifactRarity(a) {
+    const response = await fetch(getArtifactAIEndpoint(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ artifact: a })
+    });
+    if (!response.ok) {
+        let detail = "";
+        try { detail = (await response.json()).error || ""; } catch (_) {}
+        throw new Error(detail || `ИИ-сервер вернул ошибку ${response.status}`);
+    }
+    const result = await response.json();
+    const requiredStats = ["stamina", "weight", "chemProtection", "gravProtection", "thermProtection", "elecProtection", "blood", "health", "radiation", "meleeProtection", "biteProtection", "hunger", "thirst", "shock"];
+    if (!ARTIFACT_RARITIES.includes(result.rarity) || typeof result.explanation !== "string" || !result.stats || requiredStats.some(key => !Number.isFinite(Number(result.stats[key]))))
+        throw new Error("ИИ вернул неполный набор характеристик или некорректную редкость. Попробуйте ещё раз.");
+    return result;
+}
 let activeArtifactType = "Все";
 let artifactSearchTerm = "";
 
@@ -1380,7 +1411,8 @@ function renderArtifacts() {
             group.forEach(a => {
                 html += `<div class="artifact-card">
                     <div class="artifact-name">${escapeHtml(a.name)}</div>
-                    <div class="text-warn mb-10" style="font-size:11px;">ТИП: ${escapeHtml(normalizeArtifactType(a).toUpperCase())}</div>
+                    <div class="text-warn mb-10" style="font-size:11px;">ТИП: ${escapeHtml(normalizeArtifactType(a).toUpperCase())} · РЕДКОСТЬ: ${escapeHtml((a.aiRarity || "НЕ ОЦЕНЁН ИИ").toUpperCase())} · ЦЕНА: ${Number(a.price) || 0} руб.</div>
+                    ${a.aiExplanation ? `<p class="text-warn" style="font-size:11px;margin:0 0 10px;">ОЦЕНКА ИИ: ${escapeHtml(a.aiExplanation)}</p>` : ''}
                     <div class="artifact-stats">
                         <div class="stat"><span class="stat-label">Стамина:</span><span class="stat-value ${a.stamina >= 0 ? 'positive' : 'negative'}">${a.stamina >= 0 ? '+' : ''}${a.stamina}</span></div>
                         <div class="stat"><span class="stat-label">Вес:</span><span class="stat-value">${a.weight} кг</span></div>
@@ -1414,53 +1446,41 @@ function renderArtifacts() {
         <input type="text" id="artName" required>
         <label>ТИП АРТЕФАКТА:</label>
         <select id="artType" required>${ARTIFACT_TYPES.map(type => `<option value="${type}">${type}</option>`).join('')}</select>
-        <div class="stat-input"><label>Стамина:</label><input type="number" id="artStamina" step="0.1" value="0"></div>
-        <div class="stat-input"><label>Вес (кг):</label><input type="number" id="artWeight" step="0.1" value="0" required></div>
-        <div class="stat-input"><label>Защита от Химических аномалий (%):</label><input type="number" id="artChemProtection" step="0.1" value="0"></div>
-        <div class="stat-input"><label>Защита от Гравитационных аномалий (%):</label><input type="number" id="artGravProtection" step="0.1" value="0"></div>
-        <div class="stat-input"><label>Защита от Термических аномалий (%):</label><input type="number" id="artThermProtection" step="0.1" value="0"></div>
-        <div class="stat-input"><label>Защита от Электрических аномалий (%):</label><input type="number" id="artElecProtection" step="0.1" value="0"></div>
-        <div class="stat-input"><label>Кровь:</label><input type="number" id="artBlood" step="0.1" value="0"></div>
-        <div class="stat-input"><label>Здоровье:</label><input type="number" id="artHealth" step="0.1" value="0"></div>
-        <div class="stat-input"><label>Радиация:</label><input type="number" id="artRadiation" step="0.1" value="0"></div>
-        <div class="stat-input"><label>Защита от ближнего оружия (%):</label><input type="number" id="artMeleeProtection" step="0.1" value="0"></div>
-        <div class="stat-input"><label>Защита от укусов (%):</label><input type="number" id="artBiteProtection" step="0.1" value="0"></div>
-        <div class="stat-input"><label>Голод:</label><input type="number" id="artHunger" step="0.1" value="0"></div>
-        <div class="stat-input"><label>Жажда:</label><input type="number" id="artThirst" step="0.1" value="0"></div>
-        <div class="stat-input"><label>Шок:</label><input type="number" id="artShock" step="0.1" value="0"></div>
+        <label>ЦЕНА АРТЕФАКТА (РУБ.):</label>
+        <input type="number" id="artPrice" min="0" step="1" value="0" required>
+        <p class="text-warn" style="font-size:11px;">ХАРАКТЕРИСТИКИ И РЕДКОСТЬ ПОЛНОСТЬЮ ОПРЕДЕЛЯЕТ ИИ ПО НАЗВАНИЮ И ТИПУ. ИГРОК УКАЗЫВАЕТ ТОЛЬКО НАЗВАНИЕ, ТИП И ЦЕНУ. После генерации характеристики появятся в карточке артефакта.</p>
         <button type="submit" class="btn small mt-10">+ ДОБАВИТЬ АРТЕФАКТ</button></form></div></div>`;
     }
     return html;
 }
 
-function addArtifact(e) {
+async function addArtifact(e) {
     e.preventDefault();
     if (!canEditEntries()) return;
+    const submitButton = e.submitter || document.querySelector('#content_artifact_add_form button[type="submit"]');
+    if (submitButton) { submitButton.disabled = true; submitButton.textContent = "ИИ ОЦЕНИВАЕТ..."; }
     const newId = artifacts.length ? Math.max(...artifacts.map(x=>x.id))+1 : 1;
-    artifacts.push({
+    const newArtifact = {
         id: newId,
         name: document.getElementById("artName").value.trim(),
         type: document.getElementById("artType").value,
-        stamina: parseFloat(document.getElementById("artStamina").value) || 0,
-        weight: parseFloat(document.getElementById("artWeight").value) || 0,
-        chemProtection: parseFloat(document.getElementById("artChemProtection").value) || 0,
-        gravProtection: parseFloat(document.getElementById("artGravProtection").value) || 0,
-        thermProtection: parseFloat(document.getElementById("artThermProtection").value) || 0,
-        elecProtection: parseFloat(document.getElementById("artElecProtection").value) || 0,
-        blood: parseFloat(document.getElementById("artBlood").value) || 0,
-        health: parseFloat(document.getElementById("artHealth").value) || 0,
-        radiation: parseFloat(document.getElementById("artRadiation").value) || 0,
-        meleeProtection: parseFloat(document.getElementById("artMeleeProtection").value) || 0,
-        biteProtection: parseFloat(document.getElementById("artBiteProtection").value) || 0,
-        hunger: parseFloat(document.getElementById("artHunger").value) || 0,
-        thirst: parseFloat(document.getElementById("artThirst").value) || 0,
-        shock: parseFloat(document.getElementById("artShock").value) || 0
-    });
-    save(STORAGE.artifacts, artifacts);
-    renderContent();
+        price: Math.max(0, parseFloat(document.getElementById("artPrice").value) || 0)
+    };
+    try {
+        const ai = await determineArtifactRarity(newArtifact);
+        Object.assign(newArtifact, ai.stats);
+        newArtifact.aiRarity = ai.rarity;
+        newArtifact.aiExplanation = ai.explanation;
+        artifacts.push(newArtifact);
+        save(STORAGE.artifacts, artifacts);
+        renderContent();
+    } catch (error) {
+        alert("Не удалось получить оценку ИИ: " + error.message + "\nАртефакт не сохранён.");
+        if (submitButton) { submitButton.disabled = false; submitButton.textContent = "+ ДОБАВИТЬ АРТЕФАКТ"; }
+    }
 }
 
-function editArtifact(id) {
+async function editArtifact(id) {
     if (!canEditEntries()) return;
     const a = artifacts.find(x => x.id === id);
     if (!a) return;
@@ -1468,25 +1488,23 @@ function editArtifact(id) {
     const name = prompt("Название:", a.name); if (name === null) return;
     const type = prompt("Тип (Термические / Гравитационные / Химические / Электрические):", a.type); if (type === null) return;
     if (!ARTIFACT_TYPES.includes(type.trim())) { alert("Укажите один из четырёх типов: Термические, Гравитационные, Химические или Электрические."); return; }
-    const fields = [
-        ["stamina", "Стамина"], ["weight", "Вес (кг)"],
-        ["chemProtection", "Защита от Химических (%)"], ["gravProtection", "Защита от Гравитационных (%)"],
-        ["thermProtection", "Защита от Термических (%)"], ["elecProtection", "Защита от Электрических (%)"],
-        ["blood", "Кровь"], ["health", "Здоровье"], ["radiation", "Радиация"],
-        ["meleeProtection", "Защита от ближнего оружия (%)"], ["biteProtection", "Защита от укусов (%)"],
-        ["hunger", "Голод"], ["thirst", "Жажда"], ["shock", "Шок"]
-    ];
-    const values = {};
-    for (const [key, label] of fields) {
-        const value = prompt(label + ":", a[key] ?? 0);
-        if (value === null) return;
-        values[key] = parseFloat(value) || 0;
+    const price = prompt("Цена артефакта (руб.):", a.price ?? 0); if (price === null) return;
+    const updated = { ...a,
+        name: name.trim() || a.name,
+        type: type.trim(),
+        price: Math.max(0, parseFloat(price) || 0)
+    };
+    try {
+        const ai = await determineArtifactRarity(updated);
+        Object.assign(updated, ai.stats);
+        updated.aiRarity = ai.rarity;
+        updated.aiExplanation = ai.explanation;
+        Object.assign(a, updated);
+        save(STORAGE.artifacts, artifacts);
+        renderContent();
+    } catch (error) {
+        alert("Не удалось получить оценку ИИ: " + error.message + "\nИзменения не сохранены.");
     }
-    a.name = name.trim() || a.name;
-    a.type = type.trim();
-    Object.assign(a, values);
-    save(STORAGE.artifacts, artifacts);
-    renderContent();
 }
 
 function deleteArtifact(id) {

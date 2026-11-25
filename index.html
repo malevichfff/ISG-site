@@ -468,11 +468,9 @@ const SOVET_PASS = "admin";
 const SOVET_CALLSIGN = "СОВЕТ";
 const ROLE_LEVEL = { guest: 0, boets: 1, sovet: 2 };
 
-const DEFAULT_FIGHTERS = [
-    { callsign: "ВОРОН-7", password: "voron7", rank: "Боец", status: "АКТИВЕН", note: "Специалист по артефактам." },
-    { callsign: "ЛИСА", password: "lisa123", rank: "Боец", status: "НА ЗАДАНИИ", note: "Инфильтрация в объект «Чёрный обелиск»." },
-    { callsign: "ШТОРМ", password: "storm445", rank: "Боец", status: "АКТИВЕН", note: "Полевые операции." }
-];
+// Демо-бойцы удалены. Новые бойцы появляются только после регистрации и одобрения Советом.
+const DEFAULT_FIGHTERS = [];
+const DEMO_FIGHTER_CALLSIGNS = ["ВОРОН-7", "ЛИСА", "ШТОРМ"];
 
 const DEFAULT_STALKERS = [
     { id: 1, callsign: "БРОДЯГА", rank: "1", status: "В БАРЕРЕ", birthDate: "1995-03-15", note: "Новобранец.", photo: "" },
@@ -636,7 +634,9 @@ const FIREBASE_DEFAULTS = {
 };
 const STATE_SETTERS = {
     tabs: v => tabs = normalizeList(v),
-    fighters: v => fighters = normalizeList(v),
+    fighters: v => fighters = normalizeList(v).filter(f =>
+        !DEMO_FIGHTER_CALLSIGNS.includes(String(f.callsign || "").trim().toUpperCase())
+    ),
     applications: v => applications = normalizeList(v),
     stalkers: v => stalkers = normalizeList(v).map(s => ({
         ...s,
@@ -685,6 +685,17 @@ async function initFirebase() {
             const stalkersIndex = tabs.findIndex(t => t.id === "stalkerTasks");
             tabs.splice(stalkersIndex >= 0 ? stalkersIndex + 1 : tabs.length, 0, { id: "mutantDatabase", label: "БАЗА МУТАНТОВ", minRole: "boets" });
             await db.ref(`${ROOT_PATH}/tabs`).set(tabs);
+        }
+
+        // Удаляем старые демо-аккаунты из уже существующей базы Firebase.
+        const storedFightersSnapshot = await db.ref(`${ROOT_PATH}/fighters`).once("value");
+        const storedFighters = normalizeList(storedFightersSnapshot.val());
+        const realFighters = storedFighters.filter(f =>
+            !DEMO_FIGHTER_CALLSIGNS.includes(String(f.callsign || "").trim().toUpperCase())
+        );
+        if (realFighters.length !== storedFighters.length) {
+            await db.ref(`${ROOT_PATH}/fighters`).set(realFighters);
+            fighters = realFighters;
         }
 
         Object.keys(FIREBASE_DEFAULTS).forEach(key => {

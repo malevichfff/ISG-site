@@ -1243,7 +1243,9 @@ function renderArtifacts() {
         ARTIFACT_TYPES.filter(type => activeArtifactType === "Все" || activeArtifactType === type).forEach(type => {
             const group = visibleArtifacts.filter(a => normalizeArtifactType(a) === type);
             if (!group.length) return;
-            html += `<h3 class="group-header" style="cursor:default;"><span class="group-title">${type.toUpperCase()}</span><span class="group-count">${group.length} шт.</span></h3>`;
+            const groupId = "artifact_" + ARTIFACT_TYPES.indexOf(type);
+            const isCollapsed = collapsedGroups[groupId] === true;
+            html += `<div class="group-header ${isCollapsed ? 'is-collapsed' : ''}" onclick="toggleGroup('${groupId}')" data-group-id="${groupId}"><span class="group-title">${type.toUpperCase()}</span><span class="group-count">${group.length} шт.</span><span class="group-toggle">${isCollapsed ? '+' : '−'}</span></div><div class="group-content ${isCollapsed ? 'collapsed' : ''}" id="content_${groupId}">`;
             group.forEach(a => {
                 html += `<div class="artifact-card">
                     <div class="artifact-name">${escapeHtml(a.name)}</div>
@@ -1270,6 +1272,7 @@ function renderArtifacts() {
                     </div>` : ''}
                 </div>`;
             });
+            html += `</div>`;
         });
     }
 

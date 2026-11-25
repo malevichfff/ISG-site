@@ -417,7 +417,6 @@ tr:hover td { background: rgba(0,255,65,0.05); }
         <div id="adminApplicationsList"></div>
         <hr style="border-color:#ffb000;margin:20px 0;">
         <h3 style="color:#ffb000;">[ УПРАВЛЕНИЕ БОЙЦАМИ ]</h3>
-        <div id="councilPeopleCount" class="ascii-box mt-10" data-title="[ ЛИЧНЫЙ СОСТАВ ]" style="margin:8px 0 12px;">ПОД УПРАВЛЕНИЕМ СОВЕТА: 0 БОЙЦОВ</div>
         <div id="councilOnlineCount" class="ascii-box mt-10" data-title="[ МОНИТОРИНГ СЕССИЙ СОВЕТА ]" style="margin:8px 0 12px;">СЕЙЧАС ПОД ЛОГИНОМ «СОВЕТ»: 0 СЕССИЙ</div>
         <div id="adminFightersList"></div>
         <div id="adminAccountControls"></div>
@@ -1890,11 +1889,6 @@ function renderAdmin() {
           <button class="btn danger small" type="submit">ИЗМЕНИТЬ ЛОГИН / ПАРОЛЬ СОВЕТА И ЗАВЕРШИТЬ СЕССИИ</button>
         </form>` : "";
     renderCouncilPresenceCount();
-    const councilCount = document.getElementById("councilPeopleCount");
-    if (councilCount) {
-        const activeCount = fighters.filter(f => String(f.status || "").toUpperCase() === "АКТИВЕН").length;
-        councilCount.textContent = `ПОД УПРАВЛЕНИЕМ СОВЕТА: ${fighters.length} БОЙЦОВ · АКТИВНЫХ: ${activeCount}`;
-    }
 
     let html = `<table style="font-size:12px;"><tr><th>ID</th><th>НАЗВАНИЕ</th><th>МИН. РОЛЬ</th><th>ДЕЙСТВИЕ</th></tr>`;
     tabs.forEach(t => { const locked=["home","reports"].includes(t.id); html += `<tr><td>${escapeHtml(t.id)}</td><td>${escapeHtml(t.label)}</td><td>${t.minRole.toUpperCase()}</td><td>${locked?'<span class="text-warn">базовая</span>':`<button class="btn danger small" onclick="removeTab('${t.id}')">×</button>`}</td></tr>`; });

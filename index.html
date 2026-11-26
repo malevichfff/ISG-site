@@ -1423,6 +1423,11 @@ function renderArtifacts() {
     if (canEditEntries()) {
         const addArtifactCollapsed = collapsedGroups["artifact_add_form"] === true;
         html += `<div class="group-header ${addArtifactCollapsed ? 'is-collapsed' : ''}" onclick="toggleGroup('artifact_add_form')" data-group-id="artifact_add_form"><span class="group-title">ДОБАВИТЬ АРТЕФАКТ</span><span class="group-toggle">${addArtifactCollapsed ? '+' : '−'}</span></div><div class="group-content ${addArtifactCollapsed ? 'collapsed' : ''}" id="content_artifact_add_form"><div class="form-block mt-10"><form onsubmit="addArtifact(event)">
+        <label>ФОТОГРАФИЯ АРТЕФАКТА ДЛЯ РАСПОЗНАВАНИЯ ИИ:</label>
+        <input type="file" id="artPhoto" accept="image/*">
+        <img id="artPhotoPreview" class="photo-preview" style="display:none;max-width:100%;max-height:260px;margin-top:8px;">
+        <button type="button" class="btn small mt-10" id="artRecognizeButton" onclick="recognizeArtifactPhoto()">✦ РАСПОЗНАТЬ ИИ</button>
+        <p id="artPhotoStatus" class="text-warn" style="font-size:12px;margin-top:8px;" aria-live="polite">// Загрузите фото и нажмите «РАСПОЗНАТЬ ИИ».</p>
         <label>НАЗВАНИЕ АРТЕФАКТА:</label>
         <input type="text" id="artName" required>
         <label>ТИП АРТЕФАКТА:</label>
@@ -1436,7 +1441,7 @@ function renderArtifacts() {
             <option value="Легендарный">Легендарный</option>
         </select>
         <div class="stat-input"><label>Стамина:</label><input type="number" id="artStamina" step="0.1"></div>
-        <div class="stat-input"><label>Вес (кг):</label><input type="number" id="artWeight" step="0.1" required></div>
+        <div class="stat-input"><label>Вес (кг):</label><input type="number" id="artWeight" step="0.1"></div>
         <div class="stat-input"><label>Защита от Химических аномалий (%):</label><input type="number" id="artChemProtection" step="0.1"></div>
         <div class="stat-input"><label>Защита от Гравитационных аномалий (%):</label><input type="number" id="artGravProtection" step="0.1"></div>
         <div class="stat-input"><label>Защита от Термических аномалий (%):</label><input type="number" id="artThermProtection" step="0.1"></div>
@@ -1452,6 +1457,146 @@ function renderArtifacts() {
         <button type="submit" class="btn small mt-10">+ ДОБАВИТЬ АРТЕФАКТ</button></form></div></div>`;
     }
     return html;
+}
+
+async function recognizeArtifactPhoto() {
+    if (!canEditEntries()) return;
+    const fileInput = document.getElementById("artPhoto");
+    const status = document.getElementById("artPhotoStatus");
+    const button = document.getElementById("artRecognizeButton");
+    const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+    if (!file) {
+        status.textContent = "// Сначала выберите фотографию артефакта.";
+        return;
+    }
+    if (!file.type || !file.type.startsWith("image/")) {
+        status.textContent = "// Ошибка: выберите файл изображения.";
+        return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+        status.textContent = "// Файл слишком большой. Максимальный размер — 10 МБ.";
+        return;
+    }
+
+    const fieldMap = {
+        stamina: "artStamina",
+        weight: "artWeight",
+        chemProtection: "artChemProtection",
+        gravProtection: "artGravProtection",
+        thermProtection: "artThermProtection",
+        elecProtection: "artElecProtection",
+        blood: "artBlood",
+        health: "artHealth",
+        radiation: "artRadiation",
+        meleeProtection: "artMeleeProtection",
+        biteProtection: "artBiteProtection",
+        hunger: "artHunger",
+        thirst: "artThirst",
+        shock: "artShock"
+    };
+
+    button.disabled = true;
+    button.textContent = "ИИ АНАЛИЗИРУЕТ ФОТО...";
+    status.textContent = "// Отправляем изображение в ISG Artifact AI. Это может занять некоторое время.";
+    try {
+        const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(new Error("Не удалось прочитать выбранное изображение."));
+            reader.readAsDataURL(file);
+        });
+
+        const preview = document.getElementById("artPhotoPreview");
+        if (preview) {
+            preview.src = dataUrl;
+            preview.style.display = "block";
+        }
+
+        const response = await fetch("https://isg-artifact-ai.gedos6876.workers.dev/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                imageBase64: dataUrl,
+                mimeType: file.type
+            }),
+            credentials: "omit"
+        });
+
+        let payload;
+        try {
+            payload = await response.json();
+        } catch (_) {
+            throw new Error("Worker вернул ответ, который не удалось прочитать как JSON.");
+        }
+        if (!response.ok) {
+            throw new Error(payload.error || payload.message || ("Ошибка Worker: HTTP " + response.status));
+        }
+
+        const result = payload.data || payload.result || payload;
+        if (result.success === false) {
+            throw new Error(result.error || result.message || "ИИ не смогла распознать изображение.");
+        }
+
+        if (typeof result.name === "string" && result.name.trim()) {
+            document.getElementById("artName").value = result.name.trim();
+        }
+
+        if (typeof result.rarity === "string" && result.rarity.trim()) {
+            const rarityOptions = Array.from(document.getElementById("artRarity").options);
+            const matchedRarity = rarityOptions.find(option =>
+                option.value.toLocaleLowerCase("ru") === result.rarity.trim().toLocaleLowerCase("ru")
+            );
+            if (matchedRarity) document.getElementById("artRarity").value = matchedRarity.value;
+        }
+
+        // Сначала очищаем все характеристики: в карточку попадут только поля,
+        // которые Worker действительно вернул после анализа фотографии.
+        Object.values(fieldMap).forEach(id => {
+            const input = document.getElementById(id);
+            if (input) input.value = "";
+        });
+
+        const stats = result.stats && typeof result.stats === "object" ? result.stats : {};
+        let recognizedStats = 0;
+        Object.entries(fieldMap).forEach(([key, id]) => {
+            if (!Object.prototype.hasOwnProperty.call(stats, key) || stats[key] === null || stats[key] === "") return;
+            const value = Number(stats[key]);
+            if (!Number.isFinite(value)) return;
+            const input = document.getElementById(id);
+            if (input) {
+                input.value = String(value);
+                recognizedStats++;
+            }
+        });
+
+        const recognizedName = Boolean(document.getElementById("artName").value.trim());
+        const recognizedRarity = rarityOptionsHasValue(result.rarity);
+        if (!recognizedName && !recognizedStats && !recognizedRarity) {
+            status.textContent = "// ИИ не обнаружила читаемых данных. Попробуйте другое, более чёткое фото.";
+        } else {
+            const count = Number.isFinite(Number(result.recognizedCount))
+                ? Number(result.recognizedCount)
+                : recognizedStats;
+            status.textContent = "// РАСПОЗНАВАНИЕ ЗАВЕРШЕНО. Характеристик заполнено: " + recognizedStats +
+                (count > recognizedStats ? " (Worker сообщил о " + count + " распознанных значениях)." : ".") +
+                " Проверьте поля перед сохранением.";
+        }
+    } catch (error) {
+        console.error("ISG Artifact AI:", error);
+        status.textContent = "// ОШИБКА РАСПОЗНАВАНИЯ: " + (error && error.message ? error.message : String(error)) +
+            ". Если указана ошибка CORS, проверьте разрешённый Origin в настройках Worker.";
+    } finally {
+        button.disabled = false;
+        button.textContent = "✦ РАСПОЗНАТЬ ИИ";
+    }
+}
+
+function rarityOptionsHasValue(value) {
+    if (typeof value !== "string" || !value.trim()) return false;
+    const select = document.getElementById("artRarity");
+    return Array.from(select.options).some(option =>
+        option.value.toLocaleLowerCase("ru") === value.trim().toLocaleLowerCase("ru")
+    );
 }
 
 function addArtifact(e) {

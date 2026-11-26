@@ -955,7 +955,6 @@ function renderContent() {
     if (!tab) { content.innerHTML = `<div class="ascii-box danger">[ОШИБКА] Вкладка не найдена.</div>`; return; }
     if (!canSeeTab(tab)) { content.innerHTML = `<div class="ascii-box danger">[ОТКАЗ В ДОСТУПЕ]\n"${tab.label}"\nТребуется: ${tab.minRole.toUpperCase()}.\nВаш уровень: ${currentRole().toUpperCase()}.</div>`; return; }
     content.innerHTML = renderTabContent(tab.id);
-    if (tab.id === "buy") addBuyCalcItem();
     if (["artifacts", "buy", "sell"].includes(tab.id)) restoreGroupStates();
 }
 

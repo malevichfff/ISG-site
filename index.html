@@ -647,7 +647,7 @@ const FIREBASE_DEFAULTS = {
     sell: DEFAULT_SELL, reports: DEFAULT_REPORTS
 };
 const STATE_SETTERS = {
-    tabs: v => tabs = normalizeList(v),
+    tabs: v => tabs = normalizeList(v).map(t => t.id === "buy" ? { ...t, label: "КАЛЬКУЛЯТОР" } : t),
     fighters: v => fighters = normalizeList(v).filter(f =>
         !DEMO_FIGHTER_CALLSIGNS.includes(String(f.callsign || "").trim().toUpperCase())
     ),

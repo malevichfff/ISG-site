@@ -1513,7 +1513,9 @@ function editArtifact(id) {
     const values = {};
     const currentStats = a.stats && typeof a.stats === "object" ? a.stats : a;
     for (const [key, label] of fields) {
-        const currentValue = Object.prototype.hasOwnProperty.call(currentStats, key)
+        const hasExplicitStats = a.stats && typeof a.stats === "object";
+        const currentValue = Object.prototype.hasOwnProperty.call(currentStats, key) &&
+            (hasExplicitStats || (currentStats[key] !== 0 && currentStats[key] !== "0"))
             ? currentStats[key]
             : "";
         const value = prompt(label + " (оставьте пустым, чтобы не показывать):", currentValue);

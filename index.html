@@ -566,7 +566,7 @@ const DEFAULT_TABS = [
     { id: "mutantDatabase", label: "БАЗА МУТАНТОВ", minRole: "boets" },
     { id: "trusted", label: "ДОВЕРЕННЫЕ", minRole: "boets" },
     { id: "artifacts", label: "АРТЕФАКТЫ", minRole: "boets" },
-    { id: "buy", label: "СКУПКА", minRole: "boets" },
+    { id: "buy", label: "КАЛЬКУЛЯТОР", minRole: "boets" },
     { id: "sell", label: "ПРОДАЖА", minRole: "boets" },
     { id: "reports", label: "ОТЧЁТЫ", minRole: "boets" }
 ];
@@ -967,7 +967,7 @@ function renderTabContent(id) {
         case "mutantDatabase": return renderMutantDatabase();
         case "trusted": return renderTrusted();
         case "artifacts": return renderArtifacts();
-        case "buy": return renderBuy();
+        case "buy": return renderBuyCalculatorPage();
         case "sell": return renderSell();
         case "reports": return renderReports();
         default: return `<div class="ascii-box">[КАСТОМНАЯ ВКЛАДКА: ${id}]</div>`;
@@ -1750,6 +1750,9 @@ function normalizeBuyGroup(item) {
     else item.group = "Артефакты";
     return item.group;
 }
+function renderBuyCalculatorPage() {
+    return `<h1>&gt; КАЛЬКУЛЯТОР_</h1>${renderBuyCalculator()}`;
+}
 function renderBuy() {
     buy.forEach(normalizeBuyGroup);
     let html = `<h1>&gt; СКУПКА РЕСУРСОВ_</h1>
@@ -1801,9 +1804,9 @@ function deleteBuy(id) { if(!canEditEntries())return; if(!confirm("Удалит�
 // ===== КАЛЬКУЛЯТОР СКУПКИ (процент ВЫЧИТАЕТСЯ) =====
 function renderBuyCalculator() {
     let html = `
-<div class="group-header ${collapsedGroups["buy_calculator"] ? 'is-collapsed' : ''}" onclick="toggleGroup('buy_calculator')" data-group-id="buy_calculator"><span class="group-title">КАЛЬКУЛЯТОР СКУПКИ</span><span class="group-toggle">${collapsedGroups["buy_calculator"] ? '+' : '−'}</span></div>
+<div class="group-header ${collapsedGroups["buy_calculator"] ? 'is-collapsed' : ''}" onclick="toggleGroup('buy_calculator')" data-group-id="buy_calculator"><span class="group-title">КАЛЬКУЛЯТОР</span><span class="group-toggle">${collapsedGroups["buy_calculator"] ? '+' : '−'}</span></div>
 <div class="group-content ${collapsedGroups["buy_calculator"] ? 'collapsed' : ''}" id="content_buy_calculator"><div class="calculator">
-    <h3>[ КАЛЬКУЛЯТОР СКУПКИ ]</h3>
+    <h3>[ КАЛЬКУЛЯТОР ]</h3>
     <p class="text-warn" style="font-size:12px;margin-bottom:15px;">// Выберите позиции и укажите количество. Комиссия ISG вычитается из суммы.</p>
     <div id="buyCalcItems"></div>
     <button class="btn small" onclick="addBuyCalcItem()" style="margin-bottom:15px;">+ ДОБАВИТЬ ПОЗИЦИЮ</button>

@@ -566,7 +566,7 @@ const DEFAULT_TABS = [
     { id: "mutantDatabase", label: "БАЗА МУТАНТОВ", minRole: "boets" },
     { id: "trusted", label: "ДОВЕРЕННЫЕ", minRole: "boets" },
     { id: "artifacts", label: "АРТЕФАКТЫ", minRole: "boets" },
-    { id: "buy", label: "КАЛЬКУЛЯТОР", minRole: "boets" },
+    { id: "buy", label: "СКУПКА", minRole: "boets" },
     { id: "sell", label: "ПРОДАЖА", minRole: "boets" },
     { id: "reports", label: "ОТЧЁТЫ", minRole: "boets" }
 ];
@@ -647,7 +647,7 @@ const FIREBASE_DEFAULTS = {
     sell: DEFAULT_SELL, reports: DEFAULT_REPORTS
 };
 const STATE_SETTERS = {
-    tabs: v => tabs = normalizeList(v).map(t => t.id === "buy" ? { ...t, label: "КАЛЬКУЛЯТОР" } : t),
+    tabs: v => tabs = normalizeList(v),
     fighters: v => fighters = normalizeList(v).filter(f =>
         !DEMO_FIGHTER_CALLSIGNS.includes(String(f.callsign || "").trim().toUpperCase())
     ),
@@ -956,7 +956,6 @@ function renderContent() {
     if (!canSeeTab(tab)) { content.innerHTML = `<div class="ascii-box danger">[ОТКАЗ В ДОСТУПЕ]\n"${tab.label}"\nТребуется: ${tab.minRole.toUpperCase()}.\nВаш уровень: ${currentRole().toUpperCase()}.</div>`; return; }
     content.innerHTML = renderTabContent(tab.id);
     if (["artifacts", "buy", "sell"].includes(tab.id)) restoreGroupStates();
-    if (tab.id === "buy") addBuyCalcItem();
 }
 
 function renderTabContent(id) {
@@ -968,7 +967,7 @@ function renderTabContent(id) {
         case "mutantDatabase": return renderMutantDatabase();
         case "trusted": return renderTrusted();
         case "artifacts": return renderArtifacts();
-        case "buy": return renderBuyCalculator();
+        case "buy": return renderBuy();
         case "sell": return renderSell();
         case "reports": return renderReports();
         default: return `<div class="ascii-box">[КАСТОМНАЯ ВКЛАДКА: ${id}]</div>`;
@@ -1352,7 +1351,7 @@ function filterArtifacts() {
 function renderArtifacts() {
     artifacts.forEach(normalizeArtifactType);
     let html = `<h1>&gt; БАЗА ДАННЫХ АРТЕФАКТОВ_</h1>
-    <p class="text-warn" style="font-size:12px;">// Цветовая индикация радиации: отрицательное значение — зелёное, положительное — красное.</p>
+    <p class="text-warn" style="font-size:12px;">// Каталог разделён по типам аномалий. Положительные значения — зелёные, отрицательные — красные.</p>
     <div class="form-block"><label>ПОИСК АРТЕФАКТА:</label><input type="search" id="artifactSearch" value="${escapeHtml(artifactSearchTerm)}" placeholder="Введите название артефакта..." oninput="filterArtifacts()"></div>
     <div class="row mb-10" style="gap:8px;">
         <button class="btn small ${activeArtifactType === 'Все' ? '' : 'warn'}" onclick="setArtifactType('Все')">ВСЕ (${artifacts.length})</button>`;
@@ -1409,7 +1408,7 @@ function renderArtifacts() {
                     ${a.rarity ? `<div class="text-warn mb-10" style="font-size:11px;">РЕДКОСТЬ: ${escapeHtml(a.rarity.toUpperCase())}</div>` : ''}
                     ${visibleStats.length ? `<div class="artifact-stats">${visibleStats.map(([key, label, suffix]) => {
                         const value = Number(sourceStats[key]);
-                        return `<div class="stat"><span class="stat-label">${label}:</span><span class="stat-value ${key === "radiation" ? (value > 0 ? 'radiation-positive' : value < 0 ? 'radiation-negative' : '') : ''}">${value > 0 ? '+' : ''}${value}${suffix}</span></div>`;
+                        return `<div class="stat"><span class="stat-label">${label}:</span><span class="stat-value ${value > 0 ? 'positive' : value < 0 ? 'negative' : ''}">${value > 0 ? '+' : ''}${value}${suffix}</span></div>`;
                     }).join('')}</div>` : '<div class="text-warn mb-10" style="font-size:12px;">Характеристики не указаны</div>'}
                     ${actions ? `<div class="actions">
                         <button class="btn warn small" onclick="editArtifact(${a.id})">✎ РЕДАКТИРОВАТЬ</button>
@@ -1744,44 +1743,48 @@ function editBuy(id) {
     if(!BUY_GROUPS.includes(group.trim())){alert("Выберите раздел: Артефакты, Мутанты или Документы.");return;}
     b.item=item.trim()||b.item; b.price=price.trim()||b.price; b.group=group.trim(); save(STORAGE.buy,buy); renderContent();
 }
-function deleteBuy(id) { if(!canEditEntries())return; if(!confirm("Удалить позицию?"))return; buy=buy.filter(b=>b.id!==id); save(STORAGE.buy,buy)function renderBuyCalculator() {
-    return `
-    <h1>&gt; КАЛЬКУЛЯТОР СКУПКИ_</h1>
-    <p class="text-warn" style="font-size:12px;">// Введите позиции, цену и количество. Комиссия ISG вычитается из общей суммы.</p>
-    <div class="calculator">
-        <h3>[ РАСЧЁТ СУММЫ СКУПКИ ]</h3>
-        <div id="buyCalcItems"></div>
-        <button class="btn small" onclick="addBuyCalcItem()" style="margin-bottom:15px;">+ ДОБАВИТЬ ПОЗИЦИЮ</button>
-        <div class="calc-percent-row">
-            <label style="flex-shrink:0;">КОМИССИЯ ISG (%):</label>
-            <input type="number" id="buyCalcPercent" min="0" max="100" step="0.1" value="0" oninput="updateBuyCalc()">
-            <span class="percent-info">// Процент удержания группы от суммы сделки</span>
-        </div>
-        <div class="calc-total" id="buyCalcTotal">
-            <div class="total-line"><span>СУММА:</span><span>0.00 руб.</span></div>
-            <div class="total-line sub"><span>КОМИССИЯ (0%):</span><span>−0.00 руб.</span></div>
-            <div class="total-line final"><span>К ВЫПЛАТЕ:</span><span>0.00 руб.</span></div>
-        </div>
-        <button class="btn danger small" onclick="clearBuyCalc()" style="margin-top:10px;">ОЧИСТИТЬ</button>
-    </div>`;
+function deleteBuy(id) { if(!canEditEntries())return; if(!confirm("Удалить позицию?"))return; buy=buy.filter(b=>b.id!==id); save(STORAGE.buy,buy); renderContent(); }
+
+// ===== КАЛЬКУЛЯТОР СКУПКИ (процент ВЫЧИТАЕТСЯ) =====
+function renderBuyCalculator() {
+    let html = `
+<div class="group-header ${collapsedGroups["buy_calculator"] ? 'is-collapsed' : ''}" onclick="toggleGroup('buy_calculator')" data-group-id="buy_calculator"><span class="group-title">КАЛЬКУЛЯТОР СКУПКИ</span><span class="group-toggle">${collapsedGroups["buy_calculator"] ? '+' : '−'}</span></div>
+<div class="group-content ${collapsedGroups["buy_calculator"] ? 'collapsed' : ''}" id="content_buy_calculator"><div class="calculator">
+    <h3>[ КАЛЬКУЛЯТОР СКУПКИ ]</h3>
+    <p class="text-warn" style="font-size:12px;margin-bottom:15px;">// Выберите позиции и укажите количество. Комиссия ISG вычитается из суммы.</p>
+    <div id="buyCalcItems"></div>
+    <button class="btn small" onclick="addBuyCalcItem()" style="margin-bottom:15px;">+ ДОБАВИТЬ ПОЗИЦИЮ</button>
+    <div class="calc-percent-row">
+        <label style="flex-shrink:0;">КОМИССИЯ ISG (%):</label>
+        <input type="number" id="buyCalcPercent" min="0" max="100" step="0.1" value="0" onchange="updateBuyCalc()" oninput="updateBuyCalc()">
+        <span class="percent-info">// Процент удержания группы от суммы сделки</span>
+    </div>
+    <div class="calc-total" id="buyCalcTotal">
+        <div class="total-line"><span>СУММА:</span><span>0 руб.</span></div>
+        <div class="total-line sub"><span>КОМИССИЯ (0%):</span><span>−0 руб.</span></div>
+        <div class="total-line final"><span>К ВЫПЛАТЕ:</span><span>0 руб.</span></div>
+    </div>
+    <button class="btn danger small" onclick="clearBuyCalc()" style="margin-top:10px;">ОЧИСТИТЬ</button>
+</div></div>`;
+    return html;
 }
 
 let buyCalcCounter = 0;
 
 function addBuyCalcItem() {
+    buyCalcCounter++;
     const container = document.getElementById("buyCalcItems");
     if (!container) return;
-    buyCalcCounter++;
     const div = document.createElement("div");
     div.className = "calc-item";
     div.id = `buy-calc-item-${buyCalcCounter}`;
+    let options = '<option value="">-- Выберите товар --</option>';
+    buy.forEach(b => { options += `<option value="${b.id}" data-price="${b.price}">${escapeHtml(b.item)}</option>`; });
     div.innerHTML = `
-        <input type="text" class="buy-calc-name" placeholder="Наименование позиции" aria-label="Наименование позиции" style="flex:2;min-width:130px;">
-        <input type="number" class="buy-calc-price" min="0" step="0.01" value="0" placeholder="Цена, руб." aria-label="Цена за единицу">
-        <input type="number" class="buy-calc-qty" min="1" step="1" value="1" placeholder="Кол-во" aria-label="Количество">
-        <div class="item-price">0.00 руб.</div>
+        <select onchange="updateBuyCalc()">${options}</select>
+        <input type="number" min="1" value="1" onchange="updateBuyCalc()" oninput="updateBuyCalc()" placeholder="Кол-во">
+        <div class="item-price">0 руб.</div>
         <button class="btn danger small" onclick="removeBuyCalcItem(${buyCalcCounter})">×</button>`;
-    div.querySelectorAll("input").forEach(input => input.addEventListener("input", updateBuyCalc));
     container.appendChild(div);
     updateBuyCalc();
 }
@@ -1793,33 +1796,36 @@ function removeBuyCalcItem(id) {
 
 function updateBuyCalc() {
     let subtotal = 0;
-    document.querySelectorAll("#buyCalcItems .calc-item").forEach(item => {
-        const price = Math.max(0, parseFloat(item.querySelector(".buy-calc-price").value) || 0);
-        const qty = Math.max(0, parseInt(item.querySelector(".buy-calc-qty").value, 10) || 0);
+    const items = document.querySelectorAll("#buyCalcItems .calc-item");
+    items.forEach(item => {
+        const select = item.querySelector("select");
+        const qtyInput = item.querySelector("input");
+        const priceDiv = item.querySelector(".item-price");
+        const selectedOption = select.options[select.selectedIndex];
+        const priceText = selectedOption ? selectedOption.dataset.price : "0";
+        const qty = parseInt(qtyInput.value) || 0;
+        const price = parseFloat(priceText.replace(/[^0-9.]/g, '')) || 0;
         const itemTotal = price * qty;
-        item.querySelector(".item-price").textContent = `${itemTotal.toFixed(2)} руб.`;
+        priceDiv.textContent = `${itemTotal} руб.`;
         subtotal += itemTotal;
     });
     const percentInput = document.getElementById("buyCalcPercent");
-    const percent = Math.min(100, Math.max(0, parseFloat(percentInput ? percentInput.value : 0) || 0));
+    const percent = parseFloat(percentInput ? percentInput.value : 0) || 0;
     const commission = subtotal * percent / 100;
     const payout = subtotal - commission;
     const totalDiv = document.getElementById("buyCalcTotal");
-    if (totalDiv) totalDiv.innerHTML = `
-        <div class="total-line"><span>СУММА:</span><span>${subtotal.toFixed(2)} руб.</span></div>
-        <div class="total-line sub"><span>КОМИССИЯ (${percent}%):</span><span>−${commission.toFixed(2)} руб.</span></div>
-        <div class="total-line final"><span>К ВЫПЛАТЕ:</span><span>${payout.toFixed(2)} руб.</span></div>`;
+    if (totalDiv) {
+        totalDiv.innerHTML = `
+            <div class="total-line"><span>СУММА:</span><span>${subtotal} руб.</span></div>
+            <div class="total-line sub"><span>КОМИССИЯ (${percent}%):</span><span>−${commission.toFixed(2)} руб.</span></div>
+            <div class="total-line final"><span>К ВЫПЛАТЕ:</span><span>${payout.toFixed(2)} руб.</span></div>`;
+    }
 }
 
 function clearBuyCalc() {
     const container = document.getElementById("buyCalcItems");
     if (container) container.innerHTML = "";
     const percentInput = document.getElementById("buyCalcPercent");
-    if (percentInput) percentInput.value = 0;
-    addBuyCalcItem();
-    updateBuyCalc();
-}
-cent");
     if (percentInput) percentInput.value = 0;
     updateBuyCalc();
 }

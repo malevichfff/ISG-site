@@ -1804,8 +1804,7 @@ function deleteBuy(id) { if(!canEditEntries())return; if(!confirm("Удалит�
 // ===== КАЛЬКУЛЯТОР СКУПКИ (процент ВЫЧИТАЕТСЯ) =====
 function renderBuyCalculator() {
     let html = `
-<div class="group-header ${collapsedGroups["buy_calculator"] ? 'is-collapsed' : ''}" onclick="toggleGroup('buy_calculator')" data-group-id="buy_calculator"><span class="group-title">КАЛЬКУЛЯТОР</span><span class="group-toggle">${collapsedGroups["buy_calculator"] ? '+' : '−'}</span></div>
-<div class="group-content ${collapsedGroups["buy_calculator"] ? 'collapsed' : ''}" id="content_buy_calculator"><div class="calculator">
+<div class="calculator">
     <h3>[ КАЛЬКУЛЯТОР ]</h3>
     <p class="text-warn" style="font-size:12px;margin-bottom:15px;">// Выберите позиции и укажите количество. Комиссия ISG вычитается из суммы.</p>
     <div id="buyCalcItems"></div>
@@ -1821,7 +1820,7 @@ function renderBuyCalculator() {
         <div class="total-line final"><span>К ВЫПЛАТЕ:</span><span>0 руб.</span></div>
     </div>
     <button class="btn danger small" onclick="clearBuyCalc()" style="margin-top:10px;">ОЧИСТИТЬ</button>
-</div></div>`;
+</div>`;
     return html;
 }
 

@@ -1405,7 +1405,7 @@ function renderArtifacts() {
                 );
                 html += `<div class="artifact-card">
                     <div class="artifact-name">${escapeHtml(a.name)}</div>
-                    <div class="text-warn mb-10" style="font-size:11px;">ТИП: ${escapeHtml(normalizeArtifactType(a).toUpperCase())}</div>
+                    ${actions ? '<label class="text-warn" style="font-size:11px;display:block;margin-bottom:10px;">ТИП АРТЕФАКТА: <select onchange="changeArtifactType(\'' + a.id + '\',this.value)" style="display:inline-block;width:auto;min-width:180px;padding:5px;margin-left:6px;">' + ARTIFACT_TYPES.map(type => '<option value="' + type + '" ' + (normalizeArtifactType(a) === type ? 'selected' : '') + '>' + type + '</option>').join('') + '</select></label>' : '<div class="text-warn mb-10" style="font-size:11px;">ТИП: ' + escapeHtml(normalizeArtifactType(a).toUpperCase()) + '</div>'}
                     ${a.rarity ? `<div class="text-warn mb-10" style="font-size:11px;">РЕДКОСТЬ: ${escapeHtml(a.rarity.toUpperCase())}</div>` : ''}
                     ${visibleStats.length ? `<div class="artifact-stats">${visibleStats.map(([key, label, suffix]) => {
                         const value = Number(sourceStats[key]);
@@ -1729,6 +1729,15 @@ function editArtifact(id) {
     a.type = type.trim();
     a.rarity = rarity.trim();
     a.stats = values;
+    save(STORAGE.artifacts, artifacts);
+    renderContent();
+}
+
+function changeArtifactType(id, type) {
+    if (!canEditEntries() || !ARTIFACT_TYPES.includes(type)) return;
+    const artifact = artifacts.find(item => item.id === id);
+    if (!artifact) return;
+    artifact.type = type;
     save(STORAGE.artifacts, artifacts);
     renderContent();
 }

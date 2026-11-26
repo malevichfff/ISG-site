@@ -1594,7 +1594,7 @@ function renderArtifactRecognitionResults() {
             ARTIFACT_TYPES.map(type => '<option value="' + escapeHtml(type) + '"' + (type === (document.getElementById("artType")?.value || ARTIFACT_TYPES[0]) ? " selected" : "") + '>' + escapeHtml(type) + '</option>').join("") +
             '</select>' +
             '<label>РЕДКОСТЬ:</label><select data-art-rec-rarity="' + index + '">' +
-            rarities.map(rarity => '<option value="' + rarity + '"' + (item.rarity === rarity ? " selected" : "") + '>' + rarity + '</option>').join("") +
+            rarities.map(rarity => '<option value="' + rarity + '"' + (item.rarity === rarity || (!item.rarity && rarity === "Обычный") ? " selected" : "") + '>' + rarity + '</option>').join("") +
             '</select>' +
             '<div style="margin-top:8px;"><b>РАСПОЗНАННЫЕ ХАРАКТЕРИСТИКИ:</b>' +
             (lines || '<div class="text-warn" style="font-size:12px;">На фото не удалось прочитать характеристики.</div>') +

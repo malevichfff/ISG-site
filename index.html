@@ -1511,16 +1511,23 @@ function editArtifact(id) {
         ["hunger", "Голод"], ["thirst", "Жажда"], ["shock", "Шок"]
     ];
     const values = {};
+    const currentStats = a.stats && typeof a.stats === "object" ? a.stats : a;
     for (const [key, label] of fields) {
-        const value = prompt(label + ":", a[key] ?? 0);
+        const currentValue = Object.prototype.hasOwnProperty.call(currentStats, key)
+            ? currentStats[key]
+            : "";
+        const value = prompt(label + " (оставьте пустым, чтобы не показывать):", currentValue);
         if (value === null) return;
-        values[key] = parseFloat(value) || 0;
+        if (String(value).trim() !== "") {
+            const number = parseFloat(String(value).replace(",", "."));
+            if (!Number.isFinite(number)) { alert("Введите корректное число для поля: " + label); return; }
+            values[key] = number;
+        }
     }
     a.name = name.trim() || a.name;
     a.type = type.trim();
     a.rarity = rarity.trim();
-    a.stats = Object.fromEntries(Object.entries(values));
-    Object.assign(a, values);
+    a.stats = values;
     save(STORAGE.artifacts, artifacts);
     renderContent();
 }

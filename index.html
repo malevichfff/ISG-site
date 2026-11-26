@@ -1429,6 +1429,7 @@ function renderArtifacts() {
         <div id="artPhotoPreview" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;"></div>
         <button type="button" class="btn small mt-10" id="artRecognizeButton" onclick="recognizeArtifactPhoto()">✦ РАСПОЗНАТЬ ИИ</button>
         <p id="artPhotoStatus" class="text-warn" style="font-size:12px;margin-top:8px;" aria-live="polite">// Загрузите фото и нажмите «РАСПОЗНАТЬ ИИ».</p>
+        <div id="artRecognitionResults"></div>
         <label>НАЗВАНИЕ АРТЕФАКТА:</label>
         <input type="text" id="artName" required>
         <label>ТИП АРТЕФАКТА:</label>
@@ -1493,9 +1494,10 @@ async function recognizeArtifactPhoto() {
     const fileInput = document.getElementById("artPhoto");
     const status = document.getElementById("artPhotoStatus");
     const button = document.getElementById("artRecognizeButton");
+    const resultsBox = document.getElementById("artRecognitionResults");
     const files = Array.from(fileInput && fileInput.files ? fileInput.files : []);
     if (!files.length) {
-        status.textContent = "// Сначала выберите хотя бы одну фотографию артефакта.";
+        status.textContent = "// Сначала выберите хотя бы одну фотографию.";
         return;
     }
     if (files.length > 10) {
@@ -1509,26 +1511,24 @@ async function recognizeArtifactPhoto() {
             return;
         }
         if (file.size > 8 * 1024 * 1024) {
-            status.textContent = "// Один файл превышает 8 МБ. Уменьшите размер фотографии.";
+            status.textContent = "// Файл «" + file.name + "» превышает 8 МБ.";
             return;
         }
     }
 
-    const fieldMap = {
-        stamina: "artStamina", weight: "artWeight", chemProtection: "artChemProtection",
-        gravProtection: "artGravProtection", thermProtection: "artThermProtection",
-        elecProtection: "artElecProtection", blood: "artBlood", health: "artHealth",
-        radiation: "artRadiation", meleeProtection: "artMeleeProtection",
-        biteProtection: "artBiteProtection", hunger: "artHunger", thirst: "artThirst", shock: "artShock"
-    };
-
     button.disabled = true;
     button.textContent = "ИИ АНАЛИЗИРУЕТ ФОТО...";
-    status.textContent = "// Передаём " + files.length + " фотографий в ISG Artifact AI...";
+    resultsBox.innerHTML = "";
+    pendingRecognizedArtifacts = [];
+    status.textContent = "// Отправляем " + files.length + " фотографий. Каждая будет распознана отдельно...";
     try {
         const images = await Promise.all(files.map(file => new Promise((resolve, reject) => {
             const reader = new FileReader();
-            reader.onload = () => resolve({ imageBase64: reader.result, mimeType: file.type });
+            reader.onload = () => resolve({
+                imageBase64: reader.result,
+                mimeType: file.type,
+                fileName: file.name
+            });
             reader.onerror = () => reject(new Error("Не удалось прочитать файл " + file.name));
             reader.readAsDataURL(file);
         })));
@@ -1541,43 +1541,24 @@ async function recognizeArtifactPhoto() {
         });
         let payload;
         try { payload = await response.json(); }
-        catch (_) { throw new Error("Worker вернул ответ, который не удалось прочитать как JSON."); }
+        catch (_) { throw new Error("Worker вернул некорректный JSON."); }
         if (!response.ok) throw new Error(payload.error || payload.message || ("Ошибка Worker: HTTP " + response.status));
         const result = payload.data || payload.result || payload;
-        if (result.success === false) throw new Error(result.error || result.message || "ИИ не смогла распознать изображения.");
+        if (result.success === false) throw new Error(result.error || result.message || "ИИ не смогла распознать фотографии.");
 
-        if (typeof result.name === "string" && result.name.trim()) {
-            document.getElementById("artName").value = result.name.trim();
+        pendingRecognizedArtifacts = Array.isArray(result.artifacts)
+            ? result.artifacts.filter(item => item && item.success !== false)
+            : [];
+        if (!pendingRecognizedArtifacts.length) {
+            const failed = Array.isArray(result.errors) ? result.errors.map(x => "Фото " + x.index + ": " + x.error).join("; ") : "";
+            status.textContent = "// Не удалось распознать ни одного артефакта. " + failed;
+            return;
         }
-        if (typeof result.rarity === "string" && result.rarity.trim()) {
-            const raritySelect = document.getElementById("artRarity");
-            const match = Array.from(raritySelect.options).find(option =>
-                option.value.toLocaleLowerCase("ru") === result.rarity.trim().toLocaleLowerCase("ru"));
-            if (match) raritySelect.value = match.value;
-        }
-
-        Object.values(fieldMap).forEach(id => {
-            const input = document.getElementById(id);
-            if (input) input.value = "";
-        });
-        const stats = result.stats && typeof result.stats === "object" ? result.stats : {};
-        let recognizedStats = 0;
-        Object.entries(fieldMap).forEach(([key, id]) => {
-            if (!Object.prototype.hasOwnProperty.call(stats, key) || stats[key] === null || stats[key] === "") return;
-            const value = Number(stats[key]);
-            if (!Number.isFinite(value)) return;
-            const input = document.getElementById(id);
-            if (input) { input.value = String(value); recognizedStats++; }
-        });
-
-        const recognizedName = Boolean(document.getElementById("artName").value.trim());
-        const recognizedRarity = rarityOptionsHasValue(result.rarity);
-        if (!recognizedName && !recognizedStats && !recognizedRarity) {
-            status.textContent = "// ИИ не обнаружила читаемых данных. Попробуйте более чёткие фотографии.";
-        } else {
-            status.textContent = "// АНАЛИЗ " + files.length + " ФОТО ЗАВЕРШЁН. Характеристик заполнено: " +
-                recognizedStats + ". Проверьте поля перед сохранением.";
-        }
+        renderArtifactRecognitionResults();
+        const failedCount = Array.isArray(result.errors) ? result.errors.length : 0;
+        status.textContent = "// ГОТОВО: распознано отдельных артефактов — " + pendingRecognizedArtifacts.length +
+            (failedCount ? "; ошибок — " + failedCount : "") +
+            ". Проверьте каждую карточку и нажмите «СОХРАНИТЬ ВСЕ».";
     } catch (error) {
         console.error("ISG Artifact AI:", error);
         status.textContent = "// ОШИБКА РАСПОЗНАВАНИЯ: " + (error && error.message ? error.message : String(error));
@@ -1586,6 +1567,82 @@ async function recognizeArtifactPhoto() {
         button.textContent = "✦ РАСПОЗНАТЬ ИИ";
     }
 }
+
+let pendingRecognizedArtifacts = [];
+
+function renderArtifactRecognitionResults() {
+    const box = document.getElementById("artRecognitionResults");
+    if (!box) return;
+    const statsMeta = [
+        ["stamina", "Стамина"], ["weight", "Вес"], ["chemProtection", "Химическая защита"],
+        ["gravProtection", "Гравитационная защита"], ["thermProtection", "Термическая защита"],
+        ["elecProtection", "Электрическая защита"], ["blood", "Кровь"], ["health", "Здоровье"],
+        ["radiation", "Радиация"], ["meleeProtection", "Защита от ближнего оружия"],
+        ["biteProtection", "Защита от укусов"], ["hunger", "Голод"], ["thirst", "Жажда"], ["shock", "Шок"]
+    ];
+    const rarities = ["Мусорный", "Обычный", "Необычный", "Редкий", "Легендарный"];
+    let html = '<div class="ascii-box mt-10" data-title="[ РЕЗУЛЬТАТЫ РАСПОЗНАВАНИЯ ]">';
+    pendingRecognizedArtifacts.forEach((item, index) => {
+        const stats = item.stats && typeof item.stats === "object" ? item.stats : {};
+        const lines = statsMeta.filter(([key]) => Object.prototype.hasOwnProperty.call(stats, key) &&
+            stats[key] !== null && stats[key] !== "" && Number.isFinite(Number(stats[key])))
+            .map(([key, label]) => '<div class="text-green" style="font-size:12px;">' + escapeHtml(label) + ': ' + escapeHtml(stats[key]) + '</div>').join("");
+        html += '<div class="artifact-card" style="margin:10px 0;">' +
+            '<div class="artifact-name">АРТЕФАКТ №' + (index + 1) + '</div>' +
+            '<label>НАЗВАНИЕ:</label><input data-art-rec-name="' + index + '" value="' + escapeHtml(item.name || "") + '" placeholder="Название с фотографии">' +
+            '<label>ТИП:</label><select data-art-rec-type="' + index + '">' +
+            ARTIFACT_TYPES.map(type => '<option value="' + escapeHtml(type) + '">' + escapeHtml(type) + '</option>').join("") +
+            '</select>' +
+            '<label>РЕДКОСТЬ:</label><select data-art-rec-rarity="' + index + '">' +
+            rarities.map(rarity => '<option value="' + rarity + '"' + (item.rarity === rarity ? " selected" : "") + '>' + rarity + '</option>').join("") +
+            '</select>' +
+            '<div style="margin-top:8px;"><b>РАСПОЗНАННЫЕ ХАРАКТЕРИСТИКИ:</b>' +
+            (lines || '<div class="text-warn" style="font-size:12px;">На фото не удалось прочитать характеристики.</div>') +
+            '</div></div>';
+    });
+    html += '<button type="button" class="btn mt-10" onclick="saveRecognizedArtifacts()">+ СОХРАНИТЬ ВСЕ ' +
+        pendingRecognizedArtifacts.length + ' КАРТОЧЕК</button></div>';
+    box.innerHTML = html;
+}
+
+function saveRecognizedArtifacts() {
+    if (!canEditEntries() || !pendingRecognizedArtifacts.length) return;
+    const baseId = artifacts.length ? Math.max(...artifacts.map(x => Number(x.id) || 0)) + 1 : 1;
+    const saved = [];
+    pendingRecognizedArtifacts.forEach((item, index) => {
+        const nameInput = document.querySelector('[data-art-rec-name="' + index + '"]');
+        const typeInput = document.querySelector('[data-art-rec-type="' + index + '"]');
+        const rarityInput = document.querySelector('[data-art-rec-rarity="' + index + '"]');
+        const name = nameInput ? nameInput.value.trim() : String(item.name || "").trim();
+        if (!name) return;
+        const rawStats = item.stats && typeof item.stats === "object" ? item.stats : {};
+        const stats = {};
+        Object.entries(rawStats).forEach(([key, value]) => {
+            const number = Number(value);
+            if (value !== null && value !== "" && Number.isFinite(number)) stats[key] = number;
+        });
+        artifacts.push({
+            id: baseId + saved.length,
+            name,
+            type: typeInput ? typeInput.value : ARTIFACT_TYPES[0],
+            rarity: rarityInput ? rarityInput.value : "Обычный",
+            stats
+        });
+        saved.push(name);
+    });
+    if (!saved.length) {
+        alert("Укажите название хотя бы для одной карточки.");
+        return;
+    }
+    save(STORAGE.artifacts, artifacts);
+    pendingRecognizedArtifacts = [];
+    const box = document.getElementById("artRecognitionResults");
+    if (box) box.innerHTML = "";
+    const status = document.getElementById("artPhotoStatus");
+    if (status) status.textContent = "// СОХРАНЕНО КАРТОЧЕК: " + saved.length + ".";
+    renderContent();
+}
+
 
 function rarityOptionsHasValue(value) {
     if (typeof value !== "string" || !value.trim()) return false;

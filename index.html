@@ -1351,7 +1351,7 @@ function filterArtifacts() {
 function renderArtifacts() {
     artifacts.forEach(normalizeArtifactType);
     let html = `<h1>&gt; БАЗА ДАННЫХ АРТЕФАКТОВ_</h1>
-    <p class="text-warn" style="font-size:12px;">// Каталог разделён по типам аномалий. Положительные значения — зелёные, отрицательные — красные.</p>
+    <p class="text-warn" style="font-size:12px;">// Цветовая индикация радиации: отрицательное значение — зелёное, положительное — красное.</p>
     <div class="form-block"><label>ПОИСК АРТЕФАКТА:</label><input type="search" id="artifactSearch" value="${escapeHtml(artifactSearchTerm)}" placeholder="Введите название артефакта..." oninput="filterArtifacts()"></div>
     <div class="row mb-10" style="gap:8px;">
         <button class="btn small ${activeArtifactType === 'Все' ? '' : 'warn'}" onclick="setArtifactType('Все')">ВСЕ (${artifacts.length})</button>`;
@@ -1408,7 +1408,7 @@ function renderArtifacts() {
                     ${a.rarity ? `<div class="text-warn mb-10" style="font-size:11px;">РЕДКОСТЬ: ${escapeHtml(a.rarity.toUpperCase())}</div>` : ''}
                     ${visibleStats.length ? `<div class="artifact-stats">${visibleStats.map(([key, label, suffix]) => {
                         const value = Number(sourceStats[key]);
-                        return `<div class="stat"><span class="stat-label">${label}:</span><span class="stat-value ${value > 0 ? 'positive' : value < 0 ? 'negative' : ''}">${value > 0 ? '+' : ''}${value}${suffix}</span></div>`;
+                        return `<div class="stat"><span class="stat-label">${label}:</span><span class="stat-value ${key === "radiation" ? (value > 0 ? 'radiation-positive' : value < 0 ? 'radiation-negative' : '') : ''}">${value > 0 ? '+' : ''}${value}${suffix}</span></div>`;
                     }).join('')}</div>` : '<div class="text-warn mb-10" style="font-size:12px;">Характеристики не указаны</div>'}
                     ${actions ? `<div class="actions">
                         <button class="btn warn small" onclick="editArtifact(${a.id})">✎ РЕДАКТИРОВАТЬ</button>

@@ -1591,7 +1591,7 @@ function renderArtifactRecognitionResults() {
             '<div class="artifact-name">АРТЕФАКТ №' + (index + 1) + '</div>' +
             '<label>НАЗВАНИЕ:</label><input data-art-rec-name="' + index + '" value="' + escapeHtml(item.name || "") + '" placeholder="Название с фотографии">' +
             '<label>ТИП:</label><select data-art-rec-type="' + index + '">' +
-            ARTIFACT_TYPES.map(type => '<option value="' + escapeHtml(type) + '">' + escapeHtml(type) + '</option>').join("") +
+            ARTIFACT_TYPES.map(type => '<option value="' + escapeHtml(type) + '"' + (type === (document.getElementById("artType")?.value || ARTIFACT_TYPES[0]) ? " selected" : "") + '>' + escapeHtml(type) + '</option>').join("") +
             '</select>' +
             '<label>РЕДКОСТЬ:</label><select data-art-rec-rarity="' + index + '">' +
             rarities.map(rarity => '<option value="' + rarity + '"' + (item.rarity === rarity ? " selected" : "") + '>' + rarity + '</option>').join("") +

@@ -884,10 +884,10 @@ function forceLogout(message) {
     alert("[СЕАНС ЗАВЕРШЁН] " + message);
 }
 function fighterRankLabel(rank) { return String(rank || "Боец"); }
-function canEditEntries() { return !isGuest(); }
-function canEditReport(report) { if (isSovet()) return true; if (!session) return false; return report.author === session.callsign; }
+function canEditEntries() { return isAdmin(); }
+function canEditReport(report) { if (isAdmin()) return true; if (!session || currentRole() !== "boets") return false; return report.author === session.callsign; }
 function canDeleteReport(report) { return canEditReport(report); }
-function canManageTabs() { return isSovet(); }
+function canManageTabs() { return isAdmin(); }
 function canSeeTab(tab) { return roleLevel(currentRole()) >= roleLevel(tab.minRole); }
 function canSeeReport(report) { return roleLevel(currentRole()) >= roleLevel(report.access); }
 
@@ -1405,8 +1405,8 @@ function renderTrusted() {
 <p class="text-warn" style="font-size:12px;">// Проверенные контакты. Клик по фото — просмотр.</p>
 <div class="row mb-10"><input type="text" id="trustedSearch" placeholder="ПОИСК..." oninput="filterTrusted()" style="flex:1;min-width:200px;margin:0;"></div>
 <div id="trustedTable">${renderTrustedTable(trusted)}</div>`;
-    if (isSovet()) {
-        html += `<div class="form-block mt-10"><h3>[ ДОБАВИТЬ ДОВЕРЕННОГО — только Совет ]</h3><form onsubmit="addTrusted(event)">
+    if (isAdmin()) {
+        html += `<div class="form-block mt-10"><h3>[ ДОБАВИТЬ ДОВЕРЕННОГО — только Одесса ]</h3><form onsubmit="addTrusted(event)">
         <div class="row">
             <div style="flex:1;min-width:150px;"><label>ПОЗЫВНОЙ:</label><input type="text" id="trCallsign" required></div>
             <div style="flex:1;min-width:120px;"><label>СТАТУС:</label><select id="trStatus"><option>АКТИВЕН</option><option>НА ЗАДАНИИ</option><option>В БАРЕРЕ</option><option>ПРОПАЛ</option><option>МЁРТВ</option></select></div>
@@ -1426,7 +1426,7 @@ function renderTrusted() {
 
 function renderTrustedTable(list) {
     if (list.length === 0) return `<p class="text-warn">// Нет записей</p>`;
-    const actions = isSovet();
+    const actions = isAdmin();
     let html = `<table><tr><th>ФОТО</th><th>ПОЗЫВНОЙ</th><th>СТАТУС</th><th>ДАТА РОЖД.</th><th>ПОМЕТКА</th>${actions?'<th>ДЕЙСТВИЕ</th>':''}</tr>`;
     list.forEach(e => {
         const photo = e.photo ? `<img src="${e.photo}" class="photo-thumb" onclick="openPhoto('${escapeHtml(e.photo)}','${escapeHtml(e.callsign)}')">` : '<span class="text-warn">—</span>';
@@ -1445,7 +1445,7 @@ function filterTrusted() {
 
 function addTrusted(e) {
     e.preventDefault();
-    if (!isSovet()) { alert("[ОТКАЗ] Только Совет."); return; }
+    if (!isAdmin()) { alert("[ОТКАЗ] Добавлять доверенных может только Одесса."); return; }
     const newId = trusted.length ? Math.max(...trusted.map(x=>x.id))+1 : 1;
     const photoPreview = document.getElementById("trPhotoPreview");
     trusted.push({
@@ -1460,7 +1460,7 @@ function addTrusted(e) {
 }
 
 function editTrusted(id) {
-    if (!isSovet()) return;
+    if (!isAdmin()) return;
     const t = trusted.find(x => x.id === id); if (!t) return;
     const callsign = prompt("Позывной:", t.callsign); if (callsign === null) return;
     const status = prompt("Статус:", t.status); if (status === null) return;
@@ -1473,7 +1473,7 @@ function editTrusted(id) {
 }
 
 function deleteTrusted(id) {
-    if (!isSovet()) return;
+    if (!isAdmin()) return;
     if (!confirm("Удалить доверенного?")) return;
     trusted = trusted.filter(e => e.id !== id);
     save(STORAGE.trusted, trusted); renderContent();
@@ -1971,7 +1971,7 @@ function renderBuy() {
             html += `</table></div>`;
         });
     }
-    if (isSovet()) { const addBuyCollapsed = collapsedGroups["buy_add_form"] === true; html += `<div class="group-header ${addBuyCollapsed?'is-collapsed':''}" onclick="toggleGroup('buy_add_form')" data-group-id="buy_add_form"><span class="group-title">ДОБАВИТЬ ПОЗИЦИЮ</span><span class="group-toggle">${addBuyCollapsed?'+':'−'}</span></div><div class="group-content ${addBuyCollapsed?'collapsed':''}" id="content_buy_add_form"><div class="form-block mt-10"><form onsubmit="addBuy(event)"><div class="row"><div style="flex:2;min-width:200px;"><label>НАИМЕНОВАНИЕ:</label><input type="text" id="buyItem" required></div><div style="flex:1;min-width:150px;"><label>ЦЕНА:</label><input type="text" id="buyPrice" required></div><div style="flex:1;min-width:150px;"><label>РАЗДЕЛ:</label><select id="buyGroup" required>${BUY_GROUPS.map(g=>`<option value="${g}">${g}</option>`).join('')}</select></div></div><button type="submit" class="btn small">+ ДОБАВИТЬ</button></form></div></div>`; }
+    if (isAdmin()) { const addBuyCollapsed = collapsedGroups["buy_add_form"] === true; html += `<div class="group-header ${addBuyCollapsed?'is-collapsed':''}" onclick="toggleGroup('buy_add_form')" data-group-id="buy_add_form"><span class="group-title">ДОБАВИТЬ ПОЗИЦИЮ</span><span class="group-toggle">${addBuyCollapsed?'+':'−'}</span></div><div class="group-content ${addBuyCollapsed?'collapsed':''}" id="content_buy_add_form"><div class="form-block mt-10"><form onsubmit="addBuy(event)"><div class="row"><div style="flex:2;min-width:200px;"><label>НАИМЕНОВАНИЕ:</label><input type="text" id="buyItem" required></div><div style="flex:1;min-width:150px;"><label>ЦЕНА:</label><input type="text" id="buyPrice" required></div><div style="flex:1;min-width:150px;"><label>РАЗДЕЛ:</label><select id="buyGroup" required>${BUY_GROUPS.map(g=>`<option value="${g}">${g}</option>`).join('')}</select></div></div><button type="submit" class="btn small">+ ДОБАВИТЬ</button></form></div></div>`; }
     html += renderBuyCalculator(); return html;
 }
 function filterCatalog(inputId) {
@@ -1987,7 +1987,7 @@ function filterCatalog(inputId) {
     });
 }
 function addBuy(e) {
-    e.preventDefault(); if (!isSovet()) { alert("Добавлять позиции в скупку может только Совет."); return; }
+    e.preventDefault(); if (!isAdmin()) { alert("Добавлять позиции может только Одесса."); return; }
     const newId = buy.length ? Math.max(...buy.map(x=>x.id))+1 : 1;
     buy.push({ id:newId, item:document.getElementById("buyItem").value.trim(), price:document.getElementById("buyPrice").value.trim(), group:document.getElementById("buyGroup").value });
     save(STORAGE.buy, buy); renderContent();
@@ -2137,7 +2137,7 @@ function renderSell() {
         });
     }
 
-    if (isSovet()) {
+    if (isAdmin()) {
         const addSellCollapsed = collapsedGroups["sell_add_form"] === true;
         html += `<div class="group-header ${addSellCollapsed?'is-collapsed':''}" onclick="toggleGroup('sell_add_form')" data-group-id="sell_add_form"><span class="group-title">ДОБАВИТЬ ПОЗИЦИЮ</span><span class="group-toggle">${addSellCollapsed?'+':'−'}</span></div><div class="group-content ${addSellCollapsed?'collapsed':''}" id="content_sell_add_form"><div class="form-block mt-10"><form onsubmit="addSell(event)">
         <div class="row">
@@ -2265,7 +2265,7 @@ function clearSellCalc() {
 
 function addSell(e) {
     e.preventDefault();
-    if (!isSovet()) { alert("Добавлять позиции в продажу может только Совет."); return; }
+    if (!isAdmin()) { alert("Добавлять позиции может только Одесса."); return; }
     const newId = sell.length ? Math.max(...sell.map(x=>x.id))+1 : 1;
     sell.push({ id: newId, item: document.getElementById("sellItem").value.trim(), price: document.getElementById("sellPrice").value.trim(), group: document.getElementById("sellGroup").value.trim() });
     save(STORAGE.sell, sell); renderContent();
@@ -2296,8 +2296,8 @@ function deleteSell(id) {
 // ===== ОТЧЁТЫ =====
 function renderReports() {
     let html = `<h1>&gt; ЛЕНТА ОТЧЁТОВ_</h1>`;
-    if (currentRole() === "boets" || isSovet()) {
-        const accessControl = isSovet()
+    if (currentRole() === "boets" || isAdmin()) {
+        const accessControl = isAdmin()
             ? `<label>УРОВЕНЬ ДОСТУПА:</label><select id="repAccess"><option value="boets">БОЕЦ</option><option value="sovet">СОВЕТ</option></select>`
             : `<input type="hidden" id="repAccess" value="boets"><p class="text-warn" style="font-size:11px;">ДОСТУП К ОТЧЁТУ: БОЙЦЫ ISG</p>`;
         html += `<div class="form-block"><h3>[ НОВЫЙ ОТЧЁТ ]</h3><form onsubmit="addReport(event)">
@@ -2325,13 +2325,13 @@ function renderReports() {
 
 function addReport(e) {
     e.preventDefault();
-    if (currentRole() !== "boets" && !isSovet()) {
+    if (currentRole() !== "boets" && !isAdmin()) {
         alert("[ОТКАЗ] Отчёты могут публиковать только бойцы ISG и Высший Совет.");
         return;
     }
     const newId = reports.length ? Math.max(...reports.map(x=>x.id))+1 : 1;
     // Боец всегда публикует отчёт только для бойцов; выбрать доступ Совета может только Совет.
-    const access = isSovet() ? document.getElementById("repAccess").value : "boets";
+    const access = isAdmin() ? document.getElementById("repAccess").value : "boets";
     const newReport = { id: newId, title: document.getElementById("repTitle").value.trim(), author: session.callsign, role: session.role, access, date: new Date().toISOString().slice(0,10), text: document.getElementById("repText").value.trim() };
     reports.push(newReport);
     save(STORAGE.reports, reports); renderContent();

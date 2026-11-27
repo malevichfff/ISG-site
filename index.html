@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-17">
+<meta name="isg-build" content="2026-11-27-18">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -2129,11 +2129,12 @@ function clearBuyCalc() {
 }
 
 // ===== КАТЕГОРИИ ПРОДАЖИ =====
-const SELL_CATEGORIES = ["Одежда", "Медикаменты", "Оружие и магазины", "Детекторы и контейнеры", "Противогазы"];
+const SELL_CATEGORIES = ["Одежда", "Медикаменты", "Оружие и магазины", "Детекторы и контейнеры", "Противогазы", "Глаза"];
 function normalizeSellCategory(entry) {
     const source = String((entry.group || "") + " " + (entry.item || "")).toLocaleLowerCase("ru");
     let category = "";
-    if (/противогаз|газмаск|респиратор/.test(source)) category = "Противогазы";
+    if (entry.group === "Глаза") category = "Глаза";
+    else if (/противогаз|газмаск|респиратор/.test(source)) category = "Противогазы";
     else if (/детектор|контейнер|артефакт|аномал/.test(source)) category = "Детекторы и контейнеры";
     else if (/оруж|магазин|патрон|пистолет|винтов|автомат|дробовик/.test(source)) category = "Оружие и магазины";
     else if (/медикамент|аптеч|медицин|бинт|антирад|лекарств|стимулятор/.test(source)) category = "Медикаменты";

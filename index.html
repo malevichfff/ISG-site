@@ -2436,7 +2436,7 @@ document.addEventListener("keydown", (e) => {
     }
 });
 
-// Звук механической клавиатуры: сухой клик переключателя и короткий возвратный щелчок
+// Приближённый звук Cherry MX Blue: выраженный click jacket, удар клавиши и возврат.
 let isgAudioContext = null;
 document.addEventListener("click", (event) => {
     const button = event.target.closest("button");
@@ -2451,49 +2451,52 @@ document.addEventListener("click", (event) => {
         const ctx = isgAudioContext;
         const now = ctx.currentTime;
 
-        // Короткий широкополосный импульс имитирует щелчок механического переключателя.
-        const makeClick = (start, duration, volume, frequency) => {
+        // Шумовой импульс с резонансом — характерный звонкий щелчок Blue.
+        const noiseClick = (at, duration, volume, cutoff, q) => {
             const length = Math.max(1, Math.floor(ctx.sampleRate * duration));
             const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
-            const samples = buffer.getChannelData(0);
+            const data = buffer.getChannelData(0);
             for (let i = 0; i < length; i++) {
-                const fade = Math.pow(1 - i / length, 2.4);
-                samples[i] = (Math.random() * 2 - 1) * fade;
+                const t = i / length;
+                data[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 3);
             }
-
-            const source = ctx.createBufferSource();
+            const src = ctx.createBufferSource();
             const filter = ctx.createBiquadFilter();
-            const gain = ctx.createGain();
-            source.buffer = buffer;
+            const amp = ctx.createGain();
+            src.buffer = buffer;
             filter.type = "bandpass";
-            filter.frequency.setValueAtTime(frequency, start);
-            filter.Q.setValueAtTime(0.85, start);
-            gain.gain.setValueAtTime(volume, start);
-            gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-            source.connect(filter);
-            filter.connect(gain);
-            gain.connect(ctx.destination);
-            source.start(start);
-            source.stop(start + duration);
+            filter.frequency.setValueAtTime(cutoff, at);
+            filter.Q.setValueAtTime(q, at);
+            amp.gain.setValueAtTime(volume, at);
+            amp.gain.exponentialRampToValueAtTime(0.0001, at + duration);
+            src.connect(filter);
+            filter.connect(amp);
+            amp.connect(ctx.destination);
+            src.start(at);
+            src.stop(at + duration);
         };
 
-        // Основной высокий клик и более тихий звук отпускания клавиши.
-        makeClick(now, 0.022, 0.19, 2850);
-        makeClick(now + 0.027, 0.016, 0.075, 1850);
+        // Основной отчётливый клик механизма при срабатывании.
+        noiseClick(now, 0.018, 0.24, 3200, 1.15);
+        // Короткий металлический призвук click jacket.
+        const clickTone = ctx.createOscillator();
+        const clickAmp = ctx.createGain();
+        clickTone.type = "square";
+        clickTone.frequency.setValueAtTime(2350, now);
+        clickTone.frequency.exponentialRampToValueAtTime(1450, now + 0.012);
+        clickAmp.gain.setValueAtTime(0.0001, now);
+        clickAmp.gain.exponentialRampToValueAtTime(0.035, now + 0.001);
+        clickAmp.gain.exponentialRampToValueAtTime(0.0001, now + 0.016);
+        clickTone.connect(clickAmp);
+        clickAmp.connect(ctx.destination);
+        clickTone.start(now);
+        clickTone.stop(now + 0.018);
 
-        // Небольшой низкий корпусной «тук», чтобы звук не был похож на электронный сигнал.
-        const body = ctx.createOscillator();
-        const bodyGain = ctx.createGain();
-        body.type = "sine";
-        body.frequency.setValueAtTime(165, now);
-        body.frequency.exponentialRampToValueAtTime(95, now + 0.035);
-        bodyGain.gain.setValueAtTime(0.0001, now);
-        bodyGain.gain.exponentialRampToValueAtTime(0.045, now + 0.003);
-        bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
-        body.connect(bodyGain);
-        bodyGain.connect(ctx.destination);
-        body.start(now);
-        body.stop(now + 0.045);
+        // Более низкий короткий удар клавиши о корпус.
+        noiseClick(now + 0.006, 0.025, 0.11, 850, 0.8);
+
+        // Тихий щелчок при возврате клавиши.
+        noiseClick(now + 0.052, 0.014, 0.085, 2500, 1.0);
     } catch (error) {
         console.warn("[ISG] Не удалось воспроизвести звук кнопки:", error);
     }

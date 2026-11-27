@@ -1636,7 +1636,9 @@ function renderArtifacts() {
                 groupedByName.get(key).push(a);
             });
             let cardIndex = 0;
-            groupedByName.forEach(variants => {
+            [...groupedByName.entries()]
+                .sort(([nameA], [nameB]) => nameA.localeCompare(nameB, "ru", { sensitivity: "base" }))
+                .forEach(([, variants]) => {
                 variants.sort((a,b) => {
                     const order = ["Мусорный","Обычный","Необычный","Редкий","Легендарный"];
                     return order.indexOf(a.rarity || "Обычный") - order.indexOf(b.rarity || "Обычный");

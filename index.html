@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-07">
+<meta name="isg-build" content="2026-11-27-08">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -2393,6 +2393,8 @@ function renderAdmin() {
     fighters.forEach(f => { fhtml += `<tr><td>${escapeHtml(f.callsign)}</td><td>${escapeHtml(fighterRankLabel(f.rank))}</td><td>${escapeHtml(f.status)}</td>${isAdmin()?`<td><button class="btn small" onclick="adminEditFighter('${encodeURIComponent(f.callsign)}')">ИЗМЕНИТЬ</button> <button class="btn danger small" onclick="removeFighter('${encodeURIComponent(f.callsign)}')">КИК / УДАЛИТЬ</button></td>`:""}</tr>`; });
     fhtml += `</table>`;
     document.getElementById("adminFightersList").innerHTML = fhtml;
+    const rolesManager = document.getElementById("adminRolesManager");
+    if (rolesManager) rolesManager.innerHTML = isAdmin() ? renderCustomRolesManager() : "";
     const accountControls = document.getElementById("adminAccountControls");
     if (accountControls) accountControls.innerHTML = isAdmin() ? `
         <hr style="border-color:#ff0033;margin:18px 0;">
@@ -2426,6 +2428,53 @@ function renderAdmin() {
     if (resetButton) resetButton.style.display = isAdmin() ? "inline-block" : "none";
 }
 
+function renderCustomRolesManager() {
+    let html = "<hr style=\"border-color:#ffb000;margin:20px 0;\"><h3 style=\"color:#ffb000;\">[ УПРАВЛЕНИЕ РОЛЯМИ ]</h3><p class=\"text-warn\" style=\"font-size:11px;\">Дополнительные названия ролей для бойцов. Они не меняют системные права доступа.</p>";
+    html += "<form onsubmit=\"adminAddCustomRole(event)\" class=\"mt-10\"><label>НАЗВАНИЕ НОВОЙ РОЛИ:</label><input id=\"newCustomRoleName\" maxlength=\"30\" required placeholder=\"Например: Медик, Учёный, Разведчик\"><button class=\"btn small\" type=\"submit\">+ ДОБАВИТЬ РОЛЬ</button></form>";
+    if (customRoles.length) {
+        html += "<table style=\"font-size:12px;\"><tr><th>РОЛЬ</th><th>ДЕЙСТВИЕ</th></tr>";
+        customRoles.forEach((role, i) => { html += `<tr><td>${escapeHtml(role)}</td><td><button class="btn small" onclick="adminRenameCustomRole(${i})">ПЕРЕИМЕНОВАТЬ</button> <button class="btn danger small" onclick="adminDeleteCustomRole(${i})">УДАЛИТЬ</button></td></tr>`; });
+        html += "</table>";
+    } else html += "<p class=\"text-warn\">// Дополнительных ролей пока нет</p>";
+    html += "<h3 class=\"mt-10\">[ НАЗНАЧЕНИЕ РОЛИ БОЙЦУ ]</h3>";
+    if (!fighters.length) return html + "<p class=\"text-warn\">// Нет зарегистрированных бойцов</p>";
+    fighters.forEach((fighter, i) => {
+        const options = ["Боец", ...customRoles].filter((role, n, all) => all.indexOf(role) === n);
+        html += `<div class="row" style="margin:8px 0;"><span style="min-width:130px;">${escapeHtml(fighter.callsign)}</span><select id="customRoleAssign-${i}" style="flex:1;min-width:130px;margin:0;">${options.map(role => `<option value="${escapeHtml(role)}" ${String(fighter.role || "Боец") === role ? "selected" : ""}>${escapeHtml(role)}</option>`).join("")}</select><button class="btn small" onclick="adminAssignFighterRole(${i})">НАЗНАЧИТЬ</button></div>`;
+    });
+    return html;
+}
+
+function adminAddCustomRole(e) {
+    e.preventDefault(); if (!isAdmin() || !db) return;
+    const role = String(document.getElementById("newCustomRoleName")?.value || "").trim();
+    if (!role || role.length > 30) { alert("Название роли должно содержать от 1 до 30 символов."); return; }
+    if (["Боец", "Совет", "Одесса"].some(x => x.toLowerCase() === role.toLowerCase()) || customRoles.some(x => x.toLowerCase() === role.toLowerCase())) { alert("Такая роль уже существует или зарезервирована."); return; }
+    customRoles.push(role); save("settings/customRoles", customRoles); renderAdmin();
+}
+
+function adminRenameCustomRole(index) {
+    if (!isAdmin()) return; const oldRole = customRoles[index]; if (!oldRole) return;
+    const nextRole = prompt("Новое название роли:", oldRole); if (nextRole === null) return;
+    const name = nextRole.trim();
+    if (!name || name.length > 30 || ["Боец", "Совет", "Одесса"].some(x => x.toLowerCase() === name.toLowerCase()) || customRoles.some((x, i) => i !== index && x.toLowerCase() === name.toLowerCase())) { alert("Название пустое, слишком длинное или уже занято."); return; }
+    customRoles[index] = name; fighters.forEach(f => { if (f.role === oldRole) f.role = name; });
+    save("settings/customRoles", customRoles); save(STORAGE.fighters, fighters); renderAdmin(); renderAgentsRefreshIfVisible();
+}
+
+function adminDeleteCustomRole(index) {
+    if (!isAdmin()) return; const role = customRoles[index];
+    if (!role || !confirm(`Удалить роль «${role}»? Бойцам с этой ролью будет назначена роль «Боец».`)) return;
+    customRoles.splice(index, 1); fighters.forEach(f => { if (f.role === role) f.role = "Боец"; });
+    save("settings/customRoles", customRoles); save(STORAGE.fighters, fighters); renderAdmin(); renderAgentsRefreshIfVisible();
+}
+
+function adminAssignFighterRole(index) {
+    if (!isAdmin()) return; const fighter = fighters[index]; if (!fighter) return;
+    const select = document.getElementById(`customRoleAssign-${index}`); if (!select) return;
+    const role = select.value; if (role !== "Боец" && !customRoles.includes(role)) { alert("Выбранная роль больше не существует."); return; }
+    fighter.role = role; save(STORAGE.fighters, fighters); renderAdmin(); renderAgentsRefreshIfVisible();
+}
 function registerFighter(e) {
     e.preventDefault();
     if (!isSovet()) return;

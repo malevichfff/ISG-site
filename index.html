@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-06">
+<meta name="isg-build" content="2026-11-27-07">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -444,6 +444,7 @@ tr:hover td { background: rgba(0,255,65,0.05); }
         <h3 style="color:#ffb000;">[ УПРАВЛЕНИЕ БОЙЦАМИ ]</h3>
         <div id="councilOnlineCount" class="ascii-box mt-10" data-title="[ МОНИТОРИНГ СЕССИЙ СОВЕТА ]" style="margin:8px 0 12px;">СЕЙЧАС ПОД ЛОГИНОМ «СОВЕТ»: 0 СЕССИЙ</div>
         <div id="adminFightersList"></div>
+        <div id="adminRolesManager"></div>
         <div id="adminAccountControls"></div>
         <form onsubmit="registerFighter(event)" class="mt-10">
             <div class="row">
@@ -512,6 +513,7 @@ const ADMIN_CALLSIGN = "ADMIN";
 const ADMIN_PASS = "@gp21438903";
 let councilAccount = { callsign: SOVET_CALLSIGN, password: "admin", version: 1 };
 let agentServiceRanks = { admin: "Администратор" };
+let customRoles = [];
 const ROLE_LEVEL = { guest: 0, boets: 1, sovet: 2, admin: 3 };
 
 // Демо-бойцы удалены. Новые бойцы появляются только после регистрации и одобрения Советом.
@@ -726,6 +728,11 @@ async function initFirebase() {
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         await firebase.auth().signInAnonymously();
         db = firebase.database();
+        db.ref(`${ROOT_PATH}/settings/customRoles`).on("value", snapshot => {
+            customRoles = normalizeList(snapshot.val()).map(x => String(x || "").trim()).filter(Boolean);
+            if (document.getElementById("adminModal")?.classList.contains("open")) renderAdmin();
+            renderAgentsRefreshIfVisible();
+        }, error => console.warn("Custom roles listener:", error));
         db.ref(`${ROOT_PATH}/settings/agentServiceRanks`).on("value", snapshot => {
             agentServiceRanks = { admin: "Администратор", ...(snapshot.val() || {}) };
             renderAgentsRefreshIfVisible();
@@ -756,6 +763,9 @@ async function initFirebase() {
             if (document.getElementById("adminModal")?.classList.contains("open")) renderAdmin();
         }, error => console.warn("Council presence listener:", error));
         updateCouncilPresence();
+        const rolesSnapshot = await db.ref(`${ROOT_PATH}/settings/customRoles`).once("value");
+        if (rolesSnapshot.exists()) customRoles = normalizeList(rolesSnapshot.val()).map(x => String(x || "").trim()).filter(Boolean);
+        else await db.ref(`${ROOT_PATH}/settings/customRoles`).set([]);
 
         const rootRef = db.ref(ROOT_PATH);
         const rootSnapshot = await rootRef.once("value");

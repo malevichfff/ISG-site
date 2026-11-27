@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-08">
+<meta name="isg-build" content="2026-11-27-09">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -1082,7 +1082,7 @@ function getAgentsDirectoryEntries() {
 
 function renderAgentsTable(list) {
     if (list.length === 0) return `<p class="text-warn">// Нет записей</p>`;
-    let html = `<table><tr><th>ПОЗЫВНОЙ</th><th>РАНГ</th><th>СТАТУС</th><th>ПОМЕТКА</th>${isAdmin() ? "<th>ИЗМЕНИТЬ РАНГ</th>" : ""}</tr>`;
+    let html = `<table><tr><th>ПОЗЫВНОЙ</th><th>РАНГ</th><th>РОЛЬ</th><th>СТАТУС</th><th>ПОМЕТКА</th>${isAdmin() ? "<th>ИЗМЕНИТЬ РАНГ</th>" : ""}</tr>`;
     list.forEach(e => {
         const fighter = fighters.find(f => String(f.callsign).toUpperCase() === String(e.callsign).toUpperCase());
         const serviceKey = e.serviceRankKey;
@@ -1092,7 +1092,7 @@ function renderAgentsTable(list) {
             : editableService
                 ? `<td><input id="agentServiceRank-${serviceKey}" maxlength="30" value="${escapeHtml(e.displayRank)}" style="min-width:110px;margin:0 0 5px;"><button class="btn small" onclick="adminSaveServiceRank('${serviceKey}')">СОХРАНИТЬ</button></td>`
                 : `<td>${escapeHtml(e.displayRank || "Боец")}</td>`;
-        html += `<tr><td>${escapeHtml(e.callsign)}</td>${rankCell}<td>${escapeHtml(e.status)}</td><td>${escapeHtml(e.note)}</td>${isAdmin() ? (fighter ? "<td>Ранг без изменения прав</td>" : (editableService ? "<td>Только отображение, права не меняются</td>" : "<td>—</td>")) : ""}</tr>`;
+        html += `<tr><td>${escapeHtml(e.callsign)}</td>${rankCell}<td>${escapeHtml(fighter ? (fighter.role || "Боец") : "—")}</td><td>${escapeHtml(e.status)}</td><td>${escapeHtml(e.note)}</td>${isAdmin() ? (fighter ? "<td>Ранг без изменения прав</td>" : (editableService ? "<td>Только отображение, права не меняются</td>" : "<td>—</td>")) : ""}</tr>`;
     });
     html += `</table>`;
     return html;

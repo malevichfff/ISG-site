@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-21">
+<meta name="isg-build" content="2026-11-27-22">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -519,6 +519,11 @@ tr:hover td { background: rgba(0,255,65,0.05); }
             <button type="button" class="btn small" onclick="saveDiscordWebhook('sovet')">СОХРАНИТЬ WEBHOOK СОВЕТА</button>
             <button type="button" class="btn danger small" onclick="clearDiscordWebhook('sovet')">УДАЛИТЬ</button>
             <span id="discordCouncilWebhookStatus" style="font-size:11px;margin-left:8px;"></span>
+            <label style="margin-top:14px;">WEBHOOK ДЛЯ НОВЫХ СТАЛКЕРОВ:</label>
+            <input type="password" id="discordStalkersWebhookInput" placeholder="https://discord.com/api/webhooks/..." autocomplete="off">
+            <button type="button" class="btn small" onclick="saveDiscordWebhook(&quot;stalkers&quot;)">СОХРАНИТЬ WEBHOOK БАЗЫ СТАЛКЕРОВ</button>
+            <button type="button" class="btn danger small" onclick="clearDiscordWebhook(&quot;stalkers&quot;)">УДАЛИТЬ</button>
+            <span id="discordStalkersWebhookStatus" style="font-size:11px;margin-left:8px;"></span>
             <p class="text-warn" style="font-size:11px;">Отчёты уровня БОЕЦ и СОВЕТ отправляются в разные каналы. В Discord не передаются автор, уровень доступа, дата и ID отчёта. URL вебхуков хранятся в Firebase и доступны клиентскому коду сайта — для закрытого проекта лучше использовать серверную функцию.</p>
         </form>
         <hr style="border-color:#ffb000;margin:16px 0;">
@@ -698,6 +703,7 @@ let councilOnlineAgents = [];
 let councilPresenceCache = {};
 let discordWebhookUrl = "";
 let discordCouncilWebhookUrl = "";
+let discordStalkersWebhookUrl = "";
 
 function loadSession() {
     try { return JSON.parse(localStorage.getItem(STORAGE.session) || "null"); }
@@ -808,6 +814,13 @@ async function initFirebase() {
             const status = document.getElementById("discordWebhookStatus");
             if (status) status.textContent = discordWebhookUrl ? "WEBHOOK НАСТРОЕН" : "WEBHOOK НЕ ЗАДАН";
         }, error => console.warn("Discord webhook setting listener:", error));
+        db.ref(`${ROOT_PATH}/settings/discordStalkersWebhookUrl`).on("value", snapshot => {
+            discordStalkersWebhookUrl = String(snapshot.val() || "");
+            const field = document.getElementById("discordStalkersWebhookInput");
+            if (field && document.activeElement !== field) field.value = discordStalkersWebhookUrl;
+            const status = document.getElementById("discordStalkersWebhookStatus");
+            if (status) status.textContent = discordStalkersWebhookUrl ? "WEBHOOK НАСТРОЕН" : "WEBHOOK НЕ ЗАДАН";
+        }, error => console.warn("Discord stalkers webhook setting listener:", error));
         db.ref(`${ROOT_PATH}/settings/discordCouncilWebhookUrl`).on("value", snapshot => {
             discordCouncilWebhookUrl = String(snapshot.val() || "");
             const field = document.getElementById("discordCouncilWebhookInput");
@@ -1399,7 +1412,7 @@ function addStalker(e) {
     if (!canEditEntries()) return;
     const newId = stalkers.length ? Math.max(...stalkers.map(x=>x.id))+1 : 1;
     const photoPreview = document.getElementById("stPhotoPreview");
-    stalkers.push({
+    const newStalker = {
         id: newId,
         callsign: document.getElementById("stCallsign").value.trim(),
         rank: document.getElementById("stRank").value,
@@ -1407,8 +1420,9 @@ function addStalker(e) {
         birthDate: document.getElementById("stBirthDate").value,
         note: document.getElementById("stNote").value.trim(),
         photo: photoPreview.dataset.photoData || document.getElementById("stPhotoUrl").value.trim() || ""
-    });
-    save(STORAGE.stalkers, stalkers);
+    };
+    stalkers.push(newStalker);
+    save(STORAGE.stalkers, stalkers).then(() => sendNewStalkerToDiscord(newStalker));
     renderContent();
 }
 
@@ -2552,12 +2566,40 @@ async function sendReportToDiscord(report) {
     }
 }
 
+async function sendNewStalkerToDiscord(stalker) {
+    const webhook = String(discordStalkersWebhookUrl || "").trim();
+    if (!webhook) return;
+    const clean = value => String(value || "Не указано").replace(/@/g, "@​");
+    const embed = { title: "НОВЫЙ СТАЛКЕР — " + clean(stalker.callsign), color: 65280, fields: [
+        { name: "Позывной", value: clean(stalker.callsign), inline: true },
+        { name: "Статус", value: clean(stalker.status), inline: true },
+        { name: "Дата рождения", value: clean(stalker.birthDate), inline: true },
+        { name: "Пометка", value: clean(stalker.note), inline: false }
+    ], footer: { text: "ISG · База сталкеров" } };
+    const payload = { username: "ISG · База сталкеров", allowed_mentions: { parse: [] }, embeds: [embed] };
+    try {
+        let response;
+        if (String(stalker.photo || "").startsWith("data:image/")) {
+            const blob = await (await fetch(stalker.photo)).blob();
+            const ext = (blob.type.split("/")[1] || "png").replace(/[^a-z0-9]/gi, "");
+            embed.image = { url: "attachment://stalker-photo." + ext };
+            const form = new FormData(); form.append("payload_json", JSON.stringify(payload));
+            form.append("files[0]", blob, "stalker-photo." + ext);
+            response = await fetch(webhook, { method: "POST", body: form });
+        } else {
+            if (/^https?:/.test(String(stalker.photo || ""))) embed.image = { url: stalker.photo };
+            response = await fetch(webhook, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        }
+        if (!response.ok) throw new Error("Discord HTTP " + response.status);
+    } catch (error) { console.error("Stalker webhook failed:", error); alert("Сталкер сохранён, но отправка в Discord не удалась. Проверьте webhook."); }
+}
 async function saveDiscordWebhook(type = "boets") {
     if (!canManageTabs()) { alert("Настраивать Discord webhook может только Совет или Одесса."); return; }
     const isCouncil = type === "sovet";
-    const inputId = isCouncil ? "discordCouncilWebhookInput" : "discordWebhookInput";
-    const statusId = isCouncil ? "discordCouncilWebhookStatus" : "discordWebhookStatus";
-    const settingKey = isCouncil ? "discordCouncilWebhookUrl" : "discordWebhookUrl";
+    const isStalkers = type === "stalkers";
+    const inputId = isCouncil ? "discordCouncilWebhookInput" : isStalkers ? "discordStalkersWebhookInput" : "discordWebhookInput";
+    const statusId = isCouncil ? "discordCouncilWebhookStatus" : isStalkers ? "discordStalkersWebhookStatus" : "discordWebhookStatus";
+    const settingKey = isCouncil ? "discordCouncilWebhookUrl" : isStalkers ? "discordStalkersWebhookUrl" : "discordWebhookUrl";
     const value = String(document.getElementById(inputId)?.value || "").trim();
     if (value && !/^https:\/\/(discord\.com|discordapp\.com)\/api\/webhooks\/\d+\/[^\s]+$/i.test(value)) {
         alert("Некорректный URL Discord webhook."); return;
@@ -2566,6 +2608,7 @@ async function saveDiscordWebhook(type = "boets") {
     try {
         await db.ref(`${ROOT_PATH}/settings/${settingKey}`).set(value);
         if (isCouncil) discordCouncilWebhookUrl = value;
+        else if (isStalkers) discordStalkersWebhookUrl = value;
         else discordWebhookUrl = value;
         const status = document.getElementById(statusId);
         if (status) status.textContent = value ? "СОХРАНЕНО" : "WEBHOOK НЕ ЗАДАН";
@@ -2577,7 +2620,7 @@ async function saveDiscordWebhook(type = "boets") {
 
 function clearDiscordWebhook(type = "boets") {
     if (!canManageTabs()) return;
-    const field = document.getElementById(type === "sovet" ? "discordCouncilWebhookInput" : "discordWebhookInput");
+    const field = document.getElementById(type === "sovet" ? "discordCouncilWebhookInput" : type === "stalkers" ? "discordStalkersWebhookInput" : "discordWebhookInput");
     if (field) field.value = "";
     saveDiscordWebhook(type);
 }

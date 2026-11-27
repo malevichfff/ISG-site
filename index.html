@@ -2507,7 +2507,7 @@ console.log("%c[ISG] Система инициализирована.", "color:#
 </script>
 
 <script>
-// ISG_AUTO_UPDATE: проверяем публикацию новой версии каждую минуту.
+// ISG_AUTO_UPDATE: проверяем публикацию новой версии каждые 10 секунд.
 (() => {
     const currentBuild = document.querySelector('meta[name="isg-build"]')?.content;
     if (!currentBuild) return;
@@ -2527,7 +2527,7 @@ console.log("%c[ISG] Система инициализирована.", "color:#
             if (!response.ok) return;
 
             const html = await response.text();
-            const match = html.match(/<meta\s+name=["']isg-build["']\\s+content=["']([^"']+)["']/i);
+            const match = html.match(/<meta\s+name=["']isg-build["']\s+content=["']([^"']+)["']/i);
             if (match && match[1] !== currentBuild) {
                 window.location.reload();
             }
@@ -2536,7 +2536,7 @@ console.log("%c[ISG] Система инициализирована.", "color:#
         } finally {
             checking = false;
         }
-    }, 60000);
+    }, 10000);
 })();
 </script>
 

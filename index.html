@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-18">
+<meta name="isg-build" content="2026-11-27-19">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -379,6 +379,37 @@ tr:hover td { background: rgba(0,255,65,0.05); }
 ::-webkit-scrollbar-thumb { background: #00ff41; }
 ::-webkit-scrollbar-thumb:hover { background: #ffb000; }
 
+/* Компактное управление звуком в правом нижнем углу */
+#soundToggleButton {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 10001;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #00ff41;
+    border-radius: 50%;
+    background: rgba(10,10,10,0.94);
+    color: #00ff41;
+    font-size: 17px;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(0,255,65,0.25);
+}
+#soundToggleButton:hover {
+    background: rgba(0,255,65,0.16);
+    border-color: #ffb000;
+    color: #ffb000;
+}
+#soundToggleButton.is-muted {
+    color: #ff0033;
+    border-color: #ff0033;
+    box-shadow: 0 0 8px rgba(255,0,51,0.2);
+}
+
 .hidden { display: none !important; }
 .text-warn { color: #ffb000; }
 .text-danger { color: #ff0033; }
@@ -403,6 +434,8 @@ tr:hover td { background: rgba(0,255,65,0.05); }
 <nav id="mainNav"></nav>
 
 <main id="content"></main>
+
+<button id="soundToggleButton" type="button" onclick="toggleISGSound()" title="Выключить звук кнопок" aria-label="Выключить звук кнопок">🔊</button>
 
 <div class="modal" id="loginModal">
     <div class="modal-content">
@@ -2724,11 +2757,24 @@ document.addEventListener("keydown", (e) => {
     }
 });
 
+// Переключатель звука интерфейса.
+let isgSoundEnabled = true;
+function toggleISGSound() {
+    isgSoundEnabled = !isgSoundEnabled;
+    const button = document.getElementById("soundToggleButton");
+    if (!button) return;
+    button.textContent = isgSoundEnabled ? "🔊" : "🔇";
+    button.classList.toggle("is-muted", !isgSoundEnabled);
+    const label = isgSoundEnabled ? "Выключить звук кнопок" : "Включить звук кнопок";
+    button.title = label;
+    button.setAttribute("aria-label", label);
+}
+
 // Приближённый звук Cherry MX Blue: выраженный click jacket, удар клавиши и возврат.
 let isgAudioContext = null;
 document.addEventListener("click", (event) => {
     const button = event.target.closest("button");
-    if (!button || button.disabled) return;
+    if (!button || button.disabled || button.id === "soundToggleButton" || !isgSoundEnabled) return;
 
     try {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;

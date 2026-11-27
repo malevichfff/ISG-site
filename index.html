@@ -458,6 +458,7 @@ tr:hover td { background: rgba(0,255,65,0.05); }
             <label>ПОМЕТКА:</label><textarea id="fighterNote" rows="2"></textarea>
             <button type="submit" class="btn small">+ ЗАРЕГИСТРИРОВАТЬ БОЙЦА</button>
         </form>
+        <div id="adminOnlySections">
         <hr style="border-color:#ffb000;margin:20px 0;">
         <h3 style="color:#ffb000;">[ УПРАВЛЕНИЕ ВКЛАДКАМИ ]</h3>
         <div id="adminTabsList"></div>
@@ -489,6 +490,7 @@ tr:hover td { background: rgba(0,255,65,0.05); }
         <div id="adminReportsList"></div>
         <hr style="border-color:#ffb000;margin:20px 0;">
         <button id="resetDemoButton" class="btn danger small" onclick="if(isAdmin() && confirm('Сбросить ВСЕ данные к демо-состоянию?')){resetAll();}">! СБРОС К ДЕМО-ДАННЫМ</button>
+        </div>
     </div>
 </div>
 
@@ -2433,10 +2435,17 @@ function renderAdmin() {
         ahtml += `</table>`;
     }
     document.getElementById("adminApplicationsList").innerHTML = ahtml;
+    const adminOnlySections = document.getElementById("adminOnlySections");
+    if (adminOnlySections) adminOnlySections.style.display = isAdmin() ? "" : "none";
 
-    let fhtml = `<table style="font-size:12px;"><tr><th>ПОЗЫВНОЙ</th><th>РАНГ</th><th>СТАТУС</th>${isAdmin()?"<th>УПРАВЛЕНИЕ</th>":""}</tr>`;
-    fighters.forEach(f => { fhtml += `<tr><td>${escapeHtml(f.callsign)}</td><td>${escapeHtml(fighterRankLabel(f.rank))}</td><td>${escapeHtml(f.status)}</td>${isAdmin()?`<td><button class="btn small" onclick="adminEditFighter('${encodeURIComponent(f.callsign)}')">ИЗМЕНИТЬ</button> <button class="btn danger small" onclick="removeFighter('${encodeURIComponent(f.callsign)}')">КИК / УДАЛИТЬ</button></td>`:""}</tr>`; });
-    fhtml += `</table>`;
+    let fhtml = "<table style=\"font-size:12px;\"><tr><th>ПОЗЫВНОЙ</th><th>РАНГ</th><th>СТАТУС</th>" + (isSovet() ? "<th>УПРАВЛЕНИЕ</th>" : "") + "</tr>";
+    fighters.forEach(f => {
+        let controls = "";
+        if (isAdmin()) controls = '<button class="btn small" onclick="adminEditFighter(\'' + encodeURIComponent(f.callsign) + '\')">ИЗМЕНИТЬ</button> <button class="btn danger small" onclick="removeFighter(\'' + encodeURIComponent(f.callsign) + '\')">УДАЛИТЬ ПРОФИЛЬ</button>';
+        else if (currentRole() === "sovet") controls = '<button class="btn danger small" onclick="kickFighter(\'' + encodeURIComponent(f.callsign) + '\')">КИКНУТЬ</button>';
+        fhtml += "<tr><td>" + escapeHtml(f.callsign) + "</td><td>" + escapeHtml(fighterRankLabel(f.rank)) + "</td><td>" + escapeHtml(f.status) + "</td>" + (isSovet() ? "<td>" + controls + "</td>" : "") + "</tr>";
+    });
+    fhtml += "</table>";
     document.getElementById("adminFightersList").innerHTML = fhtml;
     const rolesManager = document.getElementById("adminRolesManager");
     if (rolesManager) rolesManager.innerHTML = isAdmin() ? renderCustomRolesManager() : "";
@@ -2523,6 +2532,17 @@ function registerFighter(e) {
     alert(`[СИСТЕМА] Боец "${callsign}" зарегистрирован. Пароль: ${password}`);
 }
 
+async function kickFighter(encodedCallsign) {
+    if (currentRole() !== "sovet") { alert("[ОТКАЗ] Кикать бойцов может только Совет."); return; }
+    const callsign = decodeURIComponent(encodedCallsign);
+    const fighter = fighters.find(f => String(f.callsign).toUpperCase() === callsign.toUpperCase());
+    if (!fighter) return;
+    if (!confirm("Завершить активный сеанс " + callsign + "? Профиль и пароль останутся.")) return;
+    fighter.sessionVersion = Number(fighter.sessionVersion || 1) + 1;
+    await save(STORAGE.fighters, fighters);
+    renderAdmin();
+    alert("Сеанс " + callsign + " завершён. Профиль сохранён.");
+}
 function removeFighter(encodedCallsign) {
     if (!isAdmin()) { alert("[ОТКАЗ] Удалять профили может только Одесса."); return; }
     const callsign = decodeURIComponent(encodedCallsign);

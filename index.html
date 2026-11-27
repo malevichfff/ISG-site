@@ -417,7 +417,7 @@ tr:hover td { background: rgba(0,255,65,0.05); }
             <button type="submit" class="btn">&gt; ВОЙТИ В СИСТЕМУ</button>
         </form>
         <p class="mt-10" style="font-size:11px;color:#ff0033;">! Несанкционированный доступ фиксируется и преследуется.</p>
-        <p class="mt-10" style="font-size:11px;color:#ffb000;">Служебная роль: ADMIN</p>
+        <p class="mt-10" style="font-size:11px;color:#ffb000;">Служебная роль: Одесса</p>
         <p class="mt-10" style="font-size:11px;color:#ffb000;">Нет допуска? Подайте заявку — Совет рассмотрит её.</p>
         <hr style="border-color:#ffb000;margin:18px 0;">
         <h3 style="color:#ffb000;">&gt; ЗАПРОС НА РЕГИСТРАЦИЮ_</h3>
@@ -961,7 +961,7 @@ function renderMenu() {
         html += `<button class="tab-btn ${active} ${admin}" onclick="switchTab('${tab.id}')">[${tab.label}]</button>`;
     });
     html += `<div class="nav-spacer"></div>`;
-    if (isSovet()) html += `<button class="tab-btn admin" onclick="openAdmin()">⚙ ${isAdmin() ? "ADMIN" : "СОВЕТ"}</button>`;
+    if (isSovet()) html += `<button class="tab-btn admin" onclick="openAdmin()">⚙ ${isAdmin() ? "Одесса" : "СОВЕТ"}</button>`;
     if (isGuest()) {
         html += `<button class="auth-btn" onclick="openLogin()">→ АВТОРИЗАЦИЯ</button>`;
     } else {
@@ -2229,7 +2229,7 @@ async function sendReportToDiscord(report) {
 }
 
 async function saveDiscordWebhook(type = "boets") {
-    if (!canManageTabs()) { alert("Настраивать Discord webhook может только Совет или ADMIN."); return; }
+    if (!canManageTabs()) { alert("Настраивать Discord webhook может только Совет или Одесса."); return; }
     const isCouncil = type === "sovet";
     const inputId = isCouncil ? "discordCouncilWebhookInput" : "discordWebhookInput";
     const statusId = isCouncil ? "discordCouncilWebhookStatus" : "discordWebhookStatus";
@@ -2299,8 +2299,8 @@ function renderAdmin() {
     const accountControls = document.getElementById("adminAccountControls");
     if (accountControls) accountControls.innerHTML = isAdmin() ? `
         <hr style="border-color:#ff0033;margin:18px 0;">
-        <h3 style="color:#ff0033;">[ ПОЛНЫЕ ПРАВА ADMIN ]</h3>
-        <p class="text-warn" style="font-size:11px;margin:6px 0 10px;">ADMIN может изменять учётную запись Совета. После сохранения все старые сессии Совета будут завершены.</p>
+        <h3 style="color:#ff0033;">[ ПОЛНЫЕ ПРАВА ОДЕССА ]</h3>
+        <p class="text-warn" style="font-size:11px;margin:6px 0 10px;">Одесса может изменять учётную запись Совета. После сохранения все старые сессии Совета будут завершены.</p>
         <form onsubmit="adminUpdateCouncil(event)">
           <div class="row"><div style="flex:1;min-width:150px"><label>НОВЫЙ ЛОГИН СОВЕТА:</label><input id="adminCouncilLogin" maxlength="20" value="${escapeHtml(councilAccount.callsign || SOVET_CALLSIGN)}" required></div>
           <div style="flex:1;min-width:150px"><label>НОВЫЙ ПАРОЛЬ СОВЕТА:</label><input id="adminCouncilPassword" type="text" value="${escapeHtml(councilAccount.password || "")}" required minlength="4"></div></div>
@@ -2345,7 +2345,7 @@ function registerFighter(e) {
 }
 
 function removeFighter(encodedCallsign) {
-    if (!isAdmin()) { alert("[ОТКАЗ] Удалять профили может только ADMIN."); return; }
+    if (!isAdmin()) { alert("[ОТКАЗ] Удалять профили может только Одесса."); return; }
     const callsign = decodeURIComponent(encodedCallsign);
     if (!confirm(`Кикнуть ${callsign} и безвозвратно удалить профиль?`)) return;
     fighters = fighters.filter(f => f.callsign !== callsign);

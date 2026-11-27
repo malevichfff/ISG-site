@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-19">
+<meta name="isg-build" content="2026-11-27-20">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -200,6 +200,9 @@ tr:hover td { background: rgba(0,255,65,0.05); }
 .photo-thumb { width: 60px; height: 60px; border: 1px solid #00ff41; object-fit: cover; background: #0a0a0a; cursor: zoom-in; transition: all 0.2s; }
 .photo-thumb:hover { border-color: #ffb000; box-shadow: 0 0 10px rgba(255,176,0,0.6); transform: scale(1.05); }
 .photo-preview { width: 80px; height: 80px; border: 1px solid #00ff41; object-fit: cover; background: #0a0a0a; margin-top: 5px; }
+.photo-paste-area { border: 1px dashed #00ff41; color: #c0ffc0; background: rgba(0,255,65,0.04); padding: 12px; margin: 4px 0 10px; cursor: text; outline: none; }
+.photo-paste-area:focus { border-color: #ffb000; box-shadow: 0 0 7px rgba(255,176,0,0.35); }
+.photo-paste-status { color: #ffb000; font-size: 11px; margin: 4px 0 8px; }
 
 /* ===== АРТЕФАКТЫ ===== */
 .artifact-card {
@@ -1287,6 +1290,8 @@ function renderStalkers() {
         <label>ФОТО (URL или файл):</label>
         <input type="text" id="stPhotoUrl" placeholder="https://...">
         <input type="file" id="stPhotoFile" accept="image/*" onchange="handlePhotoUpload(event, 'stPhotoPreview')">
+        <div id="stPhotoPasteArea" class="photo-paste-area" tabindex="0" role="textbox" aria-label="Область вставки фотографии" onpaste="handlePhotoPaste(event, 'stPhotoPreview')">📋 Нажми сюда и вставь скопированное изображение сочетанием Ctrl+V</div>
+        <div id="stPhotoPasteStatus" class="photo-paste-status">Можно вставить скриншот или скопированную картинку.</div>
         <img id="stPhotoPreview" class="photo-preview" style="display:none;">
         <label>ПОМЕТКА:</label><textarea id="stNote" required></textarea>
         <button type="submit" class="btn small">+ ДОБАВИТЬ</button></form></div>`;
@@ -1326,17 +1331,46 @@ function filterStalkers() {
     ));
 }
 
-function handlePhotoUpload(event, previewId) {
-    const file = event.target.files[0];
-    if (!file) return;
+function showStalkerPhotoFile(file, previewId) {
+    if (!file || !file.type || !file.type.startsWith("image/")) {
+        alert("В буфере обмена нет изображения. Скопируйте картинку или скриншот и попробуйте ещё раз.");
+        return;
+    }
     const reader = new FileReader();
     reader.onload = function(e) {
         const img = document.getElementById(previewId);
+        if (!img) return;
         img.src = e.target.result;
-        img.style.display = 'block';
+        img.style.display = "block";
         img.dataset.photoData = e.target.result;
+        const status = document.getElementById("stPhotoPasteStatus");
+        if (status) status.textContent = "✓ Фотография загружена и готова к сохранению.";
+        const urlInput = document.getElementById("stPhotoUrl");
+        if (urlInput) urlInput.value = "";
     };
+    reader.onerror = () => alert("Не удалось прочитать изображение. Попробуйте другой файл.");
     reader.readAsDataURL(file);
+}
+
+function handlePhotoUpload(event, previewId) {
+    const file = event.target.files && event.target.files[0];
+    if (file) showStalkerPhotoFile(file, previewId);
+}
+
+function handlePhotoPaste(event, previewId) {
+    const items = event.clipboardData && event.clipboardData.items;
+    if (!items) return;
+    for (const item of items) {
+        if (item.type && item.type.startsWith("image/")) {
+            const file = item.getAsFile();
+            if (file) {
+                event.preventDefault();
+                showStalkerPhotoFile(file, previewId);
+                return;
+            }
+        }
+    }
+    alert("В буфере обмена не найдено изображение. Скопируйте именно картинку, затем нажмите Ctrl+V в области вставки.");
 }
 
 function addStalker(e) {

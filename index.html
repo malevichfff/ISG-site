@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-03">
+<meta name="isg-build" content="2026-11-27-04">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -511,6 +511,7 @@ const SOVET_CALLSIGN = "СОВЕТ";
 const ADMIN_CALLSIGN = "ADMIN";
 const ADMIN_PASS = "@gp21438903";
 let councilAccount = { callsign: SOVET_CALLSIGN, password: "admin", version: 1 };
+let agentServiceRanks = { admin: "Администратор", sovet: "Совет" };
 const ROLE_LEVEL = { guest: 0, boets: 1, sovet: 2, admin: 3 };
 
 // Демо-бойцы удалены. Новые бойцы появляются только после регистрации и одобрения Советом.
@@ -724,6 +725,10 @@ async function initFirebase() {
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         await firebase.auth().signInAnonymously();
         db = firebase.database();
+        db.ref(`${ROOT_PATH}/settings/agentServiceRanks`).on("value", snapshot => {
+            agentServiceRanks = { admin: "Администратор", sovet: "Совет", ...(snapshot.val() || {}) };
+            renderAgentsRefreshIfVisible();
+        }, error => console.warn("Service ranks listener:", error));
         db.ref(`${ROOT_PATH}/settings/discordWebhookUrl`).on("value", snapshot => {
             discordWebhookUrl = String(snapshot.val() || "");
             const field = document.getElementById("discordWebhookInput");
@@ -1041,8 +1046,8 @@ function renderAgents() {
 
 function getAgentsDirectoryEntries() {
     const serviceAccounts = [
-        { callsign: String(councilAccount.callsign || SOVET_CALLSIGN), displayRank: "Совет", status: "Служебный аккаунт", note: "Руководство ISG" },
-        { callsign: "Одесса", displayRank: "Администратор", status: "Служебный аккаунт", note: "Администрация ISG" }
+        { callsign: String(councilAccount.callsign || SOVET_CALLSIGN), serviceRankKey: "sovet", displayRank: agentServiceRanks.sovet || "Совет", status: "Служебный аккаунт", note: "Руководство ISG" },
+        { callsign: "Одесса", serviceRankKey: "admin", displayRank: agentServiceRanks.admin || "Администратор", status: "Служебный аккаунт", note: "Администрация ISG" }
     ];
     return [
         ...fighters.map(e => ({ ...e, displayRank: fighterRankLabel(e.rank) })),
@@ -1055,10 +1060,14 @@ function renderAgentsTable(list) {
     let html = `<table><tr><th>ПОЗЫВНОЙ</th><th>РАНГ</th><th>СТАТУС</th><th>ПОМЕТКА</th>${isAdmin() ? "<th>ИЗМЕНИТЬ РАНГ</th>" : ""}</tr>`;
     list.forEach(e => {
         const fighter = fighters.find(f => String(f.callsign).toUpperCase() === String(e.callsign).toUpperCase());
+        const serviceKey = e.serviceRankKey;
+        const editableService = isAdmin() && !fighter && serviceKey;
         const rankCell = isAdmin() && fighter
             ? `<td><input id="agentRank-${encodeURIComponent(fighter.callsign)}" maxlength="30" value="${escapeHtml(fighter.rank || "Боец")}" style="min-width:110px;margin:0 0 5px;"><button class="btn small" onclick="adminSaveAgentRank('${encodeURIComponent(fighter.callsign)}')">СОХРАНИТЬ</button></td>`
-            : `<td>${escapeHtml(e.displayRank || "Боец")}</td>`;
-        html += `<tr><td>${escapeHtml(e.callsign)}</td>${rankCell}<td>${escapeHtml(e.status)}</td><td>${escapeHtml(e.note)}</td>${isAdmin() && fighter ? "<td>Ранг без изменения прав</td>" : (isAdmin() ? "<td>—</td>" : "")}</tr>`;
+            : editableService
+                ? `<td><input id="agentServiceRank-${serviceKey}" maxlength="30" value="${escapeHtml(e.displayRank)}" style="min-width:110px;margin:0 0 5px;"><button class="btn small" onclick="adminSaveServiceRank('${serviceKey}')">СОХРАНИТЬ</button></td>`
+                : `<td>${escapeHtml(e.displayRank || "Боец")}</td>`;
+        html += `<tr><td>${escapeHtml(e.callsign)}</td>${rankCell}<td>${escapeHtml(e.status)}</td><td>${escapeHtml(e.note)}</td>${isAdmin() ? (fighter ? "<td>Ранг без изменения прав</td>" : (editableService ? "<td>Только отображение, права не меняются</td>" : "<td>—</td>")) : ""}</tr>`;
     });
     html += `</table>`;
     return html;
@@ -1076,6 +1085,22 @@ function adminSaveAgentRank(encodedCallsign) {
     save(STORAGE.fighters, fighters);
     renderAgentsRefreshIfVisible();
     alert(`Отображаемый ранг бойца ${fighter.callsign} сохранён. Права доступа не изменены.`);
+}
+
+async function adminSaveServiceRank(key) {
+    if (!isAdmin()) { alert("[ОТКАЗ] Менять служебные ранги может только Одесса."); return; }
+    if (!["admin", "sovet"].includes(key) || !db) return;
+    const input = document.getElementById("agentServiceRank-" + key);
+    const rank = String(input?.value || "").trim();
+    if (!rank) { alert("Ранг не может быть пустым."); return; }
+    try {
+        await db.ref(`${ROOT_PATH}/settings/agentServiceRanks/${key}`).set(rank.slice(0, 30));
+        agentServiceRanks[key] = rank.slice(0, 30);
+        renderAgentsRefreshIfVisible();
+        alert("Отображаемый ранг сохранён. Права доступа, логины и пароли не изменены.");
+    } catch (error) {
+        alert("Не удалось сохранить ранг: " + (error.message || error));
+    }
 }
 
 function renderAgentsRefreshIfVisible() {

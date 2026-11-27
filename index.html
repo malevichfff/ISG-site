@@ -2527,7 +2527,7 @@ console.log("%c[ISG] Система инициализирована.", "color:#
             if (!response.ok) return;
 
             const html = await response.text();
-            const match = html.match(/<meta\\s+name=["']isg-build["']\\s+content=["']([^"']+)["']/i);
+            const match = html.match(/<meta\s+name=["']isg-build["']\\s+content=["']([^"']+)["']/i);
             if (match && match[1] !== currentBuild) {
                 window.location.reload();
             }

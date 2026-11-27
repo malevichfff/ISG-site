@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-14">
+<meta name="isg-build" content="2026-11-27-15">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -977,6 +977,13 @@ function openModal(id) { document.getElementById(id).classList.add("open"); }
 function closeModal(id) { document.getElementById(id).classList.remove("open"); }
 
 function switchTab(id) {
+    if (id === "adminPanel") {
+        if (!isAdmin()) { alert("[ОТКАЗ В ДОСТУПЕ] Панель доступна только Одессе."); return; }
+        activeTab = "adminPanel";
+        renderAll();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+    }
     const tab = tabs.find(t => t.id === id);
     if (!tab) return;
     if (!canSeeTab(tab)) { alert("[ОТКАЗ В ДОСТУПЕ] Недостаточно прав."); return; }
@@ -994,8 +1001,9 @@ function renderMenu() {
         const admin = tab.minRole === "sovet" ? "admin" : "";
         html += `<button class="tab-btn ${active} ${admin}" onclick="switchTab('${tab.id}')">[${tab.label}]</button>`;
     });
+    if (isAdmin()) html += `<button class="tab-btn admin ${activeTab === "adminPanel" ? "active" : ""}" onclick="switchTab('adminPanel')">⚙ АДМИН-ПАНЕЛЬ</button>`;
     html += `<div class="nav-spacer"></div>`;
-    if (isSovet()) html += `<button class="tab-btn admin" onclick="openAdmin()">⚙ ${isAdmin() ? "Одесса" : "СОВЕТ"}</button>`;
+    if (currentRole() === "sovet") html += `<button class="tab-btn admin" onclick="openAdmin()">⚙ СОВЕТ</button>`;
     if (isGuest()) {
         html += `<button class="auth-btn" onclick="openLogin()">→ АВТОРИЗАЦИЯ</button>`;
     } else {
@@ -1009,6 +1017,11 @@ function renderMenu() {
 }
 
 function renderContent() {
+    if (activeTab === "adminPanel") {
+        if (!isAdmin()) { activeTab = "home"; renderMenu(); }
+        else { renderAdminPanelInline(); return; }
+    }
+    restoreAdminPanelToModal();
     const tab = tabs.find(t => t.id === activeTab);
     const content = document.getElementById("content");
     if (!tab) { content.innerHTML = `<div class="ascii-box danger">[ОШИБКА] Вкладка не найдена.</div>`; return; }
@@ -2419,8 +2432,48 @@ function editReport(id) {
 
 // ===== АДМИН-ПАНЕЛЬ =====
 function openAdmin() {
-    if (!canManageTabs()) { alert("[ОТКАЗ] Только Совет."); return; }
+    if (currentRole() === "admin") { switchTab("adminPanel"); return; }
+    if (currentRole() !== "sovet") { alert("[ОТКАЗ] Панель Совета доступна только Совету."); return; }
     renderAdmin(); openModal("adminModal");
+}
+
+function renderAdminPanelInline() {
+    const modal = document.getElementById("adminModal");
+    const panel = modal?.querySelector(".modal-content.warn");
+    const content = document.getElementById("content");
+    if (!modal || !panel || !content) return;
+    if (!document.getElementById("adminPanelPlaceholder")) {
+        const marker = document.createElement("div");
+        marker.id = "adminPanelPlaceholder";
+        marker.style.display = "none";
+        panel.parentNode.insertBefore(marker, panel);
+    }
+    modal.classList.remove("open");
+    content.innerHTML = "";
+    panel.querySelector(".modal-close")?.style.setProperty("display", "none");
+    panel.style.maxWidth = "none";
+    panel.style.maxHeight = "none";
+    panel.style.overflow = "visible";
+    panel.style.margin = "0 auto";
+    panel.style.boxShadow = "none";
+    panel.style.width = "100%";
+    content.appendChild(panel);
+    renderAdmin();
+}
+
+function restoreAdminPanelToModal() {
+    const modal = document.getElementById("adminModal");
+    const panel = modal?.querySelector(".modal-content.warn") || document.querySelector("#content > .modal-content.warn");
+    const marker = document.getElementById("adminPanelPlaceholder");
+    if (!modal || !panel || !marker || panel.parentNode === modal) return;
+    panel.querySelector(".modal-close")?.style.removeProperty("display");
+    panel.style.maxWidth = "";
+    panel.style.maxHeight = "";
+    panel.style.overflow = "";
+    panel.style.margin = "";
+    panel.style.boxShadow = "";
+    panel.style.width = "";
+    marker.parentNode.insertBefore(panel, marker.nextSibling);
 }
 
 function renderAdmin() {

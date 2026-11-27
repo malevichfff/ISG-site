@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-04">
+<meta name="isg-build" content="2026-11-27-05">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -408,9 +408,9 @@ tr:hover td { background: rgba(0,255,65,0.05); }
     <div class="modal-content">
         <button class="modal-close" onclick="closeModal('loginModal')">×</button>
         <h2>&gt; АВТОРИЗАЦИЯ_</h2>
-        <p class="text-warn">// Введите позывной и пароль</p>
+        <p class="text-warn">// Для Совета: придумайте любой логин и введите пароль Совета</p>
         <form onsubmit="handleLogin(event)">
-            <label>ПОЗЫВНОЙ:</label>
+            <label>ЛОГИН / ПОЗЫВНОЙ:</label>
             <input type="text" id="loginCallsign" required maxlength="20" autocomplete="off">
             <label>ПАРОЛЬ:</label>
             <input type="password" id="loginPass" required autocomplete="off">
@@ -929,8 +929,10 @@ function handleLogin(e) {
         save(STORAGE.session, session);
         closeModal("loginModal"); renderAll(); return;
     }
-    if (callsign === String(councilAccount.callsign || SOVET_CALLSIGN).toUpperCase() && pass === councilAccount.password) {
-        session = { callsign: councilAccount.callsign || SOVET_CALLSIGN, role: "sovet", authVersion: Number(councilAccount.version || 1) };
+    // Для роли Совета проверяется только общий пароль. Позывной пользователь выбирает сам.
+    if (pass === councilAccount.password) {
+        if (!callsign) { alert("[ОШИБКА] Придумайте логин для входа в Совет."); return; }
+        session = { callsign, role: "sovet", authVersion: Number(councilAccount.version || 1) };
         save(STORAGE.session, session); updateCouncilPresence(); closeModal("loginModal"); renderAll(); return;
     }
     const fighter = fighters.find(f => String(f.callsign).toUpperCase() === callsign);

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-22">
+<meta name="isg-build" content="2026-11-27-23">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -1779,7 +1779,7 @@ function renderArtifacts() {
             const group = visibleArtifacts.filter(a => normalizeArtifactType(a) === type);
             if (!group.length) return;
             const groupId = "artifact_" + ARTIFACT_TYPES.indexOf(type);
-            const isCollapsed = collapsedGroups[groupId] === true;
+            const isCollapsed = collapsedGroups[groupId] !== false;
             html += `<div class="group-header ${isCollapsed ? 'is-collapsed' : ''}" onclick="toggleGroup('${groupId}')" data-group-id="${groupId}"><span class="group-title">${type.toUpperCase()}</span><span class="group-count">${group.length} шт.</span><span class="group-toggle">${isCollapsed ? '+' : '−'}</span></div><div class="group-content ${isCollapsed ? 'collapsed' : ''}" id="content_${groupId}">`;
             const groupedByName = new Map();
             group.forEach(a => {

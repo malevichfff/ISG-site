@@ -1348,10 +1348,54 @@ function filterArtifacts() {
     }
 }
 
+function artifactVariantMarkup(a, actions) {
+    const statMeta = [
+        ["stamina", "Стамина", ""], ["weight", "Вес", " кг"],
+        ["chemProtection", "Защита от химических", "%"],
+        ["gravProtection", "Защита от гравитационных", "%"],
+        ["thermProtection", "Защита от термических", "%"],
+        ["elecProtection", "Защита от электрических", "%"],
+        ["blood", "Кровь", ""], ["health", "Здоровье", ""],
+        ["radiation", "Радиация", ""],
+        ["meleeProtection", "Защита от ближнего оружия", "%"],
+        ["biteProtection", "Защита от укусов", "%"],
+        ["hunger", "Голод", ""], ["thirst", "Жажда", ""], ["shock", "Шок", ""]
+    ];
+    const sourceStats = a.stats && typeof a.stats === "object" ? a.stats : a;
+    const visibleStats = statMeta.filter(([key]) =>
+        Object.prototype.hasOwnProperty.call(sourceStats, key) &&
+        sourceStats[key] !== null && sourceStats[key] !== "" &&
+        Number.isFinite(Number(sourceStats[key])) &&
+        (a.stats ? true : Number(sourceStats[key]) !== 0)
+    );
+    return `
+        <div class="text-warn mb-10" style="font-size:11px;">РЕДКОСТЬ: ${escapeHtml(a.rarity || "Обычный").toUpperCase()}</div>
+        ${actions ? '<label class="text-warn" style="font-size:11px;display:block;margin-bottom:10px;">ТИП АРТЕФАКТА: <select onchange="changeArtifactType(\'' + a.id + '\',this.value)" style="display:inline-block;width:auto;min-width:180px;padding:5px;margin-left:6px;">' + ARTIFACT_TYPES.map(type => '<option value="' + type + '" ' + (normalizeArtifactType(a) === type ? 'selected' : '') + '>' + type + '</option>').join('') + '</select></label>' : ''}
+        ${visibleStats.length ? `<div class="artifact-stats">${visibleStats.map(([key, label, suffix]) => {
+            const value = Number(sourceStats[key]);
+            const radiationClass = key === "radiation" ? (value > 0 ? "radiation-positive" : value < 0 ? "radiation-negative" : "") : "";
+            return `<div class="stat"><span class="stat-label">${label}:</span><span class="stat-value ${radiationClass}">${value > 0 ? '+' : ''}${value}${suffix}</span></div>`;
+        }).join('')}</div>` : '<div class="text-warn mb-10" style="font-size:12px;">Характеристики не указаны</div>'}
+        ${actions ? `<div class="actions">
+            <button class="btn warn small" onclick="editArtifact(${Number(a.id)})">✎ РЕДАКТИРОВАТЬ</button>
+            <button class="btn danger small" onclick="deleteArtifact(${Number(a.id)})">×</button>
+        </div>` : ''}
+    `;
+}
+
+function showArtifactVariant(select) {
+    const card = select.closest(".artifact-card");
+    if (!card) return;
+    const artifact = artifacts.find(a => String(a.id) === String(select.value));
+    const target = card.querySelector(".artifact-variant-details");
+    if (!artifact || !target) return;
+    target.innerHTML = artifactVariantMarkup(artifact, canEditEntries());
+}
+
 function renderArtifacts() {
     artifacts.forEach(normalizeArtifactType);
     let html = `<h1>&gt; БАЗА ДАННЫХ АРТЕФАКТОВ_</h1>
-    <p class="text-warn" style="font-size:12px;">// Каталог разделён по типам аномалий. Положительные значения — зелёные, отрицательные — красные.</p>
+    <p class="text-warn" style="font-size:12px;">// Одинаковые артефакты объединены по названию. Выберите редкость, чтобы увидеть её характеристики.</p>
     <div class="form-block"><label>ПОИСК АРТЕФАКТА:</label><input type="search" id="artifactSearch" value="${escapeHtml(artifactSearchTerm)}" placeholder="Введите название артефакта..." oninput="filterArtifacts()"></div>
     <div class="row mb-10" style="gap:8px;">
         <button class="btn small ${activeArtifactType === 'Все' ? '' : 'warn'}" onclick="setArtifactType('Все')">ВСЕ (${artifacts.length})</button>`;
@@ -1377,43 +1421,28 @@ function renderArtifacts() {
             const groupId = "artifact_" + ARTIFACT_TYPES.indexOf(type);
             const isCollapsed = collapsedGroups[groupId] === true;
             html += `<div class="group-header ${isCollapsed ? 'is-collapsed' : ''}" onclick="toggleGroup('${groupId}')" data-group-id="${groupId}"><span class="group-title">${type.toUpperCase()}</span><span class="group-count">${group.length} шт.</span><span class="group-toggle">${isCollapsed ? '+' : '−'}</span></div><div class="group-content ${isCollapsed ? 'collapsed' : ''}" id="content_${groupId}">`;
+            const groupedByName = new Map();
             group.forEach(a => {
-                const statMeta = [
-                    ["stamina", "Стамина", ""],
-                    ["weight", "Вес", " кг"],
-                    ["chemProtection", "Защита от химических", "%"],
-                    ["gravProtection", "Защита от гравитационных", "%"],
-                    ["thermProtection", "Защита от термических", "%"],
-                    ["elecProtection", "Защита от электрических", "%"],
-                    ["blood", "Кровь", ""],
-                    ["health", "Здоровье", ""],
-                    ["radiation", "Радиация", ""],
-                    ["meleeProtection", "Защита от ближнего оружия", "%"],
-                    ["biteProtection", "Защита от укусов", "%"],
-                    ["hunger", "Голод", ""],
-                    ["thirst", "Жажда", ""],
-                    ["shock", "Шок", ""]
-                ];
-                const sourceStats = a.stats && typeof a.stats === "object" ? a.stats : a;
-                const visibleStats = statMeta.filter(([key]) =>
-                    Object.prototype.hasOwnProperty.call(sourceStats, key) &&
-                    sourceStats[key] !== null &&
-                    sourceStats[key] !== "" &&
-                    Number.isFinite(Number(sourceStats[key])) &&
-                    (a.stats ? true : Number(sourceStats[key]) !== 0)
-                );
+                const key = String(a.name || "").trim().toLocaleLowerCase("ru");
+                if (!groupedByName.has(key)) groupedByName.set(key, []);
+                groupedByName.get(key).push(a);
+            });
+            let cardIndex = 0;
+            groupedByName.forEach(variants => {
+                variants.sort((a,b) => {
+                    const order = ["Мусорный","Обычный","Необычный","Редкий","Легендарный"];
+                    return order.indexOf(a.rarity || "Обычный") - order.indexOf(b.rarity || "Обычный");
+                });
+                const selected = variants[0];
+                const cardId = "artifact_variant_card_" + ARTIFACT_TYPES.indexOf(type) + "_" + cardIndex++;
                 html += `<div class="artifact-card">
-                    <div class="artifact-name">${escapeHtml(a.name)}</div>
-                    ${actions ? '<label class="text-warn" style="font-size:11px;display:block;margin-bottom:10px;">ТИП АРТЕФАКТА: <select onchange="changeArtifactType(\'' + a.id + '\',this.value)" style="display:inline-block;width:auto;min-width:180px;padding:5px;margin-left:6px;">' + ARTIFACT_TYPES.map(type => '<option value="' + type + '" ' + (normalizeArtifactType(a) === type ? 'selected' : '') + '>' + type + '</option>').join('') + '</select></label>' : '<div class="text-warn mb-10" style="font-size:11px;">ТИП: ' + escapeHtml(normalizeArtifactType(a).toUpperCase()) + '</div>'}
-                    ${a.rarity ? `<div class="text-warn mb-10" style="font-size:11px;">РЕДКОСТЬ: ${escapeHtml(a.rarity.toUpperCase())}</div>` : ''}
-                    ${visibleStats.length ? `<div class="artifact-stats">${visibleStats.map(([key, label, suffix]) => {
-                        const value = Number(sourceStats[key]);
-                        return `<div class="stat"><span class="stat-label">${label}:</span><span class="stat-value ${value > 0 ? 'positive' : value < 0 ? 'negative' : ''}">${value > 0 ? '+' : ''}${value}${suffix}</span></div>`;
-                    }).join('')}</div>` : '<div class="text-warn mb-10" style="font-size:12px;">Характеристики не указаны</div>'}
-                    ${actions ? `<div class="actions">
-                        <button class="btn warn small" onclick="editArtifact(${a.id})">✎ РЕДАКТИРОВАТЬ</button>
-                        <button class="btn danger small" onclick="deleteArtifact(${a.id})">×</button>
-                    </div>` : ''}
+                    <div class="artifact-name">${escapeHtml(selected.name)}</div>
+                    <label style="font-size:11px;">ВЫБРАТЬ РЕДКОСТЬ:
+                        <select onchange="showArtifactVariant(this)" style="margin-top:5px;">
+                            ${variants.map(a => `<option value="${escapeHtml(a.id)}" ${String(a.id) === String(selected.id) ? "selected" : ""}>${escapeHtml(a.rarity || "Обычный")}</option>`).join("")}
+                        </select>
+                    </label>
+                    <div class="artifact-variant-details">${artifactVariantMarkup(selected, actions)}</div>
                 </div>`;
             });
             html += `</div>`;
@@ -1422,7 +1451,9 @@ function renderArtifacts() {
 
     if (canEditEntries()) {
         const addArtifactCollapsed = collapsedGroups["artifact_add_form"] === true;
-        html += `<div class="group-header ${addArtifactCollapsed ? 'is-collapsed' : ''}" onclick="toggleGroup('artifact_add_form')" data-group-id="artifact_add_form"><span class="group-title">ДОБАВИТЬ АРТЕФАКТ</span><span class="group-toggle">${addArtifactCollapsed ? '+' : '−'}</span></div><div class="group-content ${addArtifactCollapsed ? 'collapsed' : ''}" id="content_artifact_add_form"><div class="form-block mt-10"><form onsubmit="addArtifact(event)">
+        html += `<div class="group-header ${addArtifactCollapsed ? 'is-collapsed' : ''}" onclick="toggleGroup('artifact_add_form')" data-group-id="artifact_add_form"><span class="group-title">ДОБАВИТЬ АРТЕФАКТ</span><span class="group-toggle">${addArtifactCollapsed ? '+' : '−'}</span></div><div class="group-content ${addArtifactCollapsed ? 'collapsed' : ''}" id="content_artifact_add_form">`;
+        // Форма добавления остаётся прежней, включая распознавание фотографий ИИ.
+        html += `<div class="form-block mt-10"><form onsubmit="addArtifact(event)">
         <label>ФОТОГРАФИЯ АРТЕФАКТА ДЛЯ РАСПОЗНАВАНИЯ ИИ:</label>
         <input type="file" id="artPhoto" accept="image/jpeg,image/png,image/webp" multiple onchange="previewArtifactPhotos()">
         <p class="text-warn" style="font-size:12px;">// Можно выбрать до 10 фотографий (JPEG, PNG или WEBP).</p>
@@ -1430,17 +1461,11 @@ function renderArtifacts() {
         <button type="button" class="btn small mt-10" id="artRecognizeButton" onclick="recognizeArtifactPhoto()">✦ РАСПОЗНАТЬ ИИ</button>
         <p id="artPhotoStatus" class="text-warn" style="font-size:12px;margin-top:8px;" aria-live="polite">// Загрузите фото и нажмите «РАСПОЗНАТЬ ИИ».</p>
         <div id="artRecognitionResults"></div>
-        <label>НАЗВАНИЕ АРТЕФАКТА:</label>
-        <input type="text" id="artName" required>
-        <label>ТИП АРТЕФАКТА:</label>
-        <select id="artType" required>${ARTIFACT_TYPES.map(type => `<option value="${type}">${type}</option>`).join('')}</select>
-        <label>РЕДКОСТЬ АРТЕФАКТА:</label>
-        <select id="artRarity" required>
-            <option value="Мусорный">Мусорный</option>
-            <option value="Обычный" selected>Обычный</option>
-            <option value="Необычный">Необычный</option>
-            <option value="Редкий">Редкий</option>
-            <option value="Легендарный">Легендарный</option>
+        <label>НАЗВАНИЕ АРТЕФАКТА:</label><input type="text" id="artName" required>
+        <label>ТИП АРТЕФАКТА:</label><select id="artType" required>${ARTIFACT_TYPES.map(type => `<option value="${type}">${type}</option>`).join('')}</select>
+        <label>РЕДКОСТЬ АРТЕФАКТА:</label><select id="artRarity" required>
+            <option value="Мусорный">Мусорный</option><option value="Обычный" selected>Обычный</option>
+            <option value="Необычный">Необычный</option><option value="Редкий">Редкий</option><option value="Легендарный">Легендарный</option>
         </select>
         <div class="stat-input"><label>Стамина:</label><input type="number" id="artStamina" step="0.1"></div>
         <div class="stat-input"><label>Вес (кг):</label><input type="number" id="artWeight" step="0.1"></div>

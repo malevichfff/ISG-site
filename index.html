@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-26">
+<meta name="isg-build" content="2026-11-27-27">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -2780,7 +2780,7 @@ async function refreshAIUsagePanel() {
         }
         if (data.trackingComplete !== true) {
             panel.innerHTML = '<p class="text-danger">// НЕТ ПОЛНЫХ ДАННЫХ О РАСХОДЕ</p>' +
-                '<p style="font-size:12px;color:#ffb000;">Cloudflare не вернул значение usage.neurons для одного или нескольких запросов. Остаток не показываем, чтобы не вводить в заблуждение.</p>' +
+                '<p style="font-size:12px;color:#ffb000;">Для части запросов модель не вернула статистику токенов. Остаток Neurons не показываем, чтобы не выдавать неполные данные за полные.</p>' +
                 '<p style="font-size:11px;color:#c0ffc0;">Неучтённых запросов: ' + (Number(data.untrackedCalls) || 0) + '. После полуночи UTC счётчик начнёт новый день.</p>';
             return;
         }
@@ -2788,22 +2788,27 @@ async function refreshAIUsagePanel() {
         const remaining = Number(data.remainingNeurons);
         const limit = Number(data.dailyLimit) || 10000;
         const percent = Math.max(0, Math.min(100, Number(data.percentUsed) || 0));
-        const reset = data.resetAt ? new Date(Number(data.resetAt)).toLocaleString("ru-RU", { timeZone: "UTC" }) + " UTC" : "00:00 UTC";
+        const reset = data.resetAt ? new Date(data.resetAt).toLocaleString("ru-RU", { timeZone: "UTC" }) + " UTC" : "00:00 UTC";
         panel.innerHTML =
-            '<div style="font-size:12px;color:#ffb000;margin-bottom:8px;">ОСТАТОК ДНЕВНОГО ЛИМИТА</div>' +
+            '<div style="font-size:12px;color:#ffb000;margin-bottom:8px;">ОСТАТОК ДНЕВНОГО ЛИМИТА (РАСЧЁТНЫЙ)</div>' +
             '<div style="font-size:24px;font-weight:bold;color:#00ff41;">' +
                 remaining.toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + ' / ' +
                 limit.toLocaleString("ru-RU") + ' Neurons</div>' +
-            '<div style="font-size:12px;color:#c0ffc0;margin:6px 0;">ИСПОЛЬЗОВАНО: ' +
-                used.toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + ' Neurons (' + percent + '%)</div>' +
+            '<div style="font-size:12px;color:#c0ffc0;margin:6px 0;">ИЗРАСХОДОВАНО: ' +
+                used.toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + ' Neurons (' + percent.toFixed(2) + '%)</div>' +
             '<div style="height:10px;border:1px solid #00ff41;background:#050505;margin:8px 0 10px;">' +
                 '<div style="height:100%;width:' + percent + '%;background:#00ff41;"></div></div>' +
+            '<div style="font-size:12px;color:#c0ffc0;margin:8px 0;">ТОКЕНЫ: ВХОД ' +
+                (Number(data.inputTokens) || 0).toLocaleString("ru-RU") + ' · ВЫХОД ' +
+                (Number(data.outputTokens) || 0).toLocaleString("ru-RU") + ' · ВСЕГО ' +
+                (Number(data.totalTokens) || 0).toLocaleString("ru-RU") + '</div>' +
             '<div style="font-size:11px;color:#ffb000;">ЗАПРОСОВ УЧТЕНО: ' + (Number(data.calls) || 0) +
-                ' · СБРОС СЧЁТЧИКА: ' + escapeHtml(reset) + '</div>';
+                ' · СБРОС СЧЁТЧИКА: ' + escapeHtml(reset) + '</div>' +
+            '<p style="font-size:10px;color:#ffb000;margin-top:8px;">Neurons рассчитаны по токенам и тарифу Qwen 3.8 27B. Это оценка расхода через ISG, а не точный баланс всего аккаунта Cloudflare.</p>';
     } catch (error) {
         panel.innerHTML = '<p class="text-danger">// СТАТИСТИКА НЕДОСТУПНА</p><p style="font-size:12px;color:#ffb000;">' +
             escapeHtml(error && error.message ? error.message : String(error)) +
-            '</p><p style="font-size:11px;color:#c0ffc0;">Проверьте публикацию Worker и настройку Durable Object binding USAGE_COUNTER.</p>';
+            '</p><p style="font-size:11px;color:#c0ffc0;">Проверьте публикацию Worker и настройку KV binding USAGE_KV.</p>';
     } finally {
         aiUsageRequestInProgress = false;
     }

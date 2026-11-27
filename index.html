@@ -228,6 +228,9 @@ tr:hover td { background: rgba(0,255,65,0.05); }
     color: #ff0033;
 }
 
+.artifact-card .stat-value.radiation-positive { color: #ff0033; }
+.artifact-card .stat-value.radiation-negative { color: #00ff41; }
+
 .artifact-card .actions {
     margin-top: 10px;
     display: flex;
@@ -1373,8 +1376,8 @@ function artifactVariantMarkup(a, actions) {
         ${actions ? '<label class="text-warn" style="font-size:11px;display:block;margin-bottom:10px;">ТИП АРТЕФАКТА: <select onchange="changeArtifactType(\'' + a.id + '\',this.value)" style="display:inline-block;width:auto;min-width:180px;padding:5px;margin-left:6px;">' + ARTIFACT_TYPES.map(type => '<option value="' + type + '" ' + (normalizeArtifactType(a) === type ? 'selected' : '') + '>' + type + '</option>').join('') + '</select></label>' : ''}
         ${visibleStats.length ? `<div class="artifact-stats">${visibleStats.map(([key, label, suffix]) => {
             const value = Number(sourceStats[key]);
-            const radiationClass = key === "radiation" ? (value > 0 ? "radiation-positive" : value < 0 ? "radiation-negative" : "") : "";
-            return `<div class="stat"><span class="stat-label">${label}:</span><span class="stat-value ${radiationClass}">${value > 0 ? '+' : ''}${value}${suffix}</span></div>`;
+            const valueClass = key === "radiation" ? (value > 0 ? "radiation-positive" : value < 0 ? "radiation-negative" : "") : (value > 0 ? "positive" : value < 0 ? "negative" : "");
+            return `<div class="stat"><span class="stat-label">${label}:</span><span class="stat-value ${valueClass}">${value > 0 ? '+' : ''}${value}${suffix}</span></div>`;
         }).join('')}</div>` : '<div class="text-warn mb-10" style="font-size:12px;">Характеристики не указаны</div>'}
         ${actions ? `<div class="actions">
             <button class="btn warn small" onclick="editArtifact(${Number(a.id)})">✎ РЕДАКТИРОВАТЬ</button>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-27">
+<meta name="isg-build" content="2026-11-27-28">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -1113,6 +1113,7 @@ function renderContent() {
     if (!canSeeTab(tab)) { content.innerHTML = `<div class="ascii-box danger">[ОТКАЗ В ДОСТУПЕ]\n"${tab.label}"\nТребуется: ${tab.minRole.toUpperCase()}.\nВаш уровень: ${currentRole().toUpperCase()}.</div>`; return; }
     content.innerHTML = renderTabContent(tab.id);
     if (["artifacts", "buy", "sell"].includes(tab.id)) restoreGroupStates();
+    if (tab.id === "artifacts") refreshArtifactAICompactStats();
 }
 
 function renderTabContent(id) {
@@ -1770,7 +1771,8 @@ function showArtifactVariant(select) {
 
 function renderArtifacts() {
     artifacts.forEach(normalizeArtifactType);
-    let html = `<h1>&gt; БАЗА ДАННЫХ АРТЕФАКТОВ_</h1>
+    let html = `<div id="artifactAICompactStats" style="font-size:10px;color:#c0ffc0;text-align:left;margin:0 0 8px 0;line-height:1.5;">// ЗАГРУЗКА СТАТИСТИКИ ИИ...</div>
+    <h1>&gt; БАЗА ДАННЫХ АРТЕФАКТОВ_</h1>
     <p class="text-warn" style="font-size:12px;">// Одинаковые артефакты объединены по названию. Выберите редкость, чтобы увидеть её характеристики.</p>
     <div class="form-block"><label>ПОИСК АРТЕФАКТА:</label><input type="search" id="artifactSearch" value="${escapeHtml(artifactSearchTerm)}" placeholder="Введите название артефакта..." oninput="filterArtifacts()"></div>
     <div class="row mb-10" style="gap:8px;">
@@ -2764,6 +2766,36 @@ function renderAdmin() {
 
 const AI_USAGE_ENDPOINT = "https://isg-artifact-ai.gedos6876.workers.dev/usage";
 let aiUsageRequestInProgress = false;
+
+async function refreshArtifactAICompactStats() {
+    const display = document.getElementById("artifactAICompactStats");
+    if (!display) return;
+    try {
+        const response = await fetch(AI_USAGE_ENDPOINT, {
+            method: "GET",
+            cache: "no-store",
+            credentials: "omit"
+        });
+        const data = await response.json();
+        if (!response.ok || data.available !== true) {
+            display.textContent = "// СТАТИСТИКА ИИ НЕДОСТУПНА";
+            return;
+        }
+        const input = Number(data.inputTokens) || 0;
+        const output = Number(data.outputTokens) || 0;
+        const total = Number(data.totalTokens) || (input + output);
+        const tokenText = "ТОКЕНЫ СЕГОДНЯ: " +
+            total.toLocaleString("ru-RU") +
+            " (ВХОД " + input.toLocaleString("ru-RU") +
+            " / ВЫХОД " + output.toLocaleString("ru-RU") + ")";
+        const neuronText = data.trackingComplete === true
+            ? " · NEURONS ОСТАЛОСЬ: " + Number(data.remainingNeurons || 0).toLocaleString("ru-RU")
+            : " · ОСТАТОК NEURONS НЕИЗВЕСТЕН";
+        display.textContent = tokenText + neuronText;
+    } catch (_) {
+        display.textContent = "// НЕ УДАЛОСЬ ПОЛУЧИТЬ СТАТИСТИКУ ИИ";
+    }
+}
 
 async function refreshAIUsagePanel() {
     const panel = document.getElementById("aiUsagePanel");

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-29">
+<meta name="isg-build" content="2026-11-27-30">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -1405,6 +1405,43 @@ async function transferStalkerToTrusted(id) {
     }
 }
 
+
+async function transferTrustedToStalkers(id) {
+    if (!isSovet()) {
+        alert("[ОТКАЗ] Возвращать доверенных в базу сталкеров может только Совет или Администратор.");
+        return;
+    }
+    const entry = trusted.find(item => Number(item.id) === Number(id));
+    if (!entry) return;
+    if (stalkers.some(item => String(item.callsign || "").trim().toLocaleLowerCase("ru") === String(entry.callsign || "").trim().toLocaleLowerCase("ru"))) {
+        alert("Этот позывной уже находится во вкладке «СТАЛКЕРЫ».");
+        return;
+    }
+    if (!confirm("Вернуть «" + entry.callsign + "» из доверенных обратно в базу сталкеров?")) return;
+
+    const nextId = stalkers.length
+        ? Math.max(...stalkers.map(item => Number(item.id) || 0)) + 1
+        : 1;
+    const restored = { ...entry, id: nextId, rank: entry.rank || "1" };
+    const previousTrusted = trusted.slice();
+    const previousStalkers = stalkers.slice();
+
+    trusted = trusted.filter(item => Number(item.id) !== Number(id));
+    stalkers = [...stalkers, restored];
+
+    try {
+        await save(STORAGE.stalkers, stalkers);
+        await save(STORAGE.trusted, trusted);
+        renderContent();
+        alert("«" + entry.callsign + "» возвращён во вкладку «СТАЛКЕРЫ».");
+    } catch (error) {
+        trusted = previousTrusted;
+        stalkers = previousStalkers;
+        renderContent();
+        alert("Не удалось сохранить перенос. Проверьте соединение с Firebase.");
+    }
+}
+
 function updateStalkerRank(id, value) {
     if (!canEditEntries()) return;
     if (!/^[1-5]$/.test(String(value))) return;
@@ -1662,10 +1699,11 @@ function renderTrusted() {
 function renderTrustedTable(list) {
     if (list.length === 0) return `<p class="text-warn">// Нет записей</p>`;
     const actions = isAdmin();
-    let html = `<table><tr><th>ФОТО</th><th>ПОЗЫВНОЙ</th><th>СТАТУС</th><th>ДАТА РОЖД.</th><th>ПОМЕТКА</th>${actions?'<th>ДЕЙСТВИЕ</th>':''}</tr>`;
+    const canTransfer = isSovet();
+    let html = `<table><tr><th>ФОТО</th><th>ПОЗЫВНОЙ</th><th>СТАТУС</th><th>ДАТА РОЖД.</th><th>ПОМЕТКА</th>${actions?'<th>ДЕЙСТВИЕ</th>':''}${canTransfer?'<th>БАЗА СТАЛКЕРОВ</th>':''}</tr>`;
     list.forEach(e => {
         const photo = e.photo ? `<img src="${e.photo}" class="photo-thumb" onclick="openPhoto('${escapeHtml(e.photo)}','${escapeHtml(e.callsign)}')">` : '<span class="text-warn">—</span>';
-        html += `<tr><td>${photo}</td><td>${escapeHtml(e.callsign)}</td><td>${escapeHtml(e.status)}</td><td>${e.birthDate||'—'}</td><td>${escapeHtml(e.note)}</td>${actions?`<td><button class="btn warn small" onclick="editTrusted(${e.id})">✎</button> <button class="btn danger small" onclick="deleteTrusted(${e.id})">×</button></td>`:''}</tr>`;
+        html += `<tr><td>${photo}</td><td>${escapeHtml(e.callsign)}</td><td>${escapeHtml(e.status)}</td><td>${e.birthDate||'—'}</td><td>${escapeHtml(e.note)}</td>${actions?`<td><button class="btn warn small" onclick="editTrusted(${e.id})">✎</button> <button class="btn danger small" onclick="deleteTrusted(${e.id})">×</button></td>`:''}${canTransfer?`<td><button class="btn small" onclick="transferTrustedToStalkers(${e.id})">← ВЕРНУТЬ</button></td>`:''}</tr>`;
     });
     html += `</table>`;
     return html;

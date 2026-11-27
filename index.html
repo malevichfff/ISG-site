@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-01">
+<meta name="isg-build" content="2026-11-27-02">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -853,7 +853,7 @@ function forceLogout(message) {
     renderAll();
     alert("[СЕАНС ЗАВЕРШЁН] " + message);
 }
-function fighterRankLabel(rank) { return "Боец"; }
+function fighterRankLabel(rank) { return String(rank || "Боец"); }
 function canEditEntries() { return !isGuest(); }
 function canEditReport(report) { if (isSovet()) return true; if (!session) return false; return report.author === session.callsign; }
 function canDeleteReport(report) { return canEditReport(report); }
@@ -1045,7 +1045,7 @@ function getAgentsDirectoryEntries() {
         { callsign: "Одесса", displayRank: "Администратор", status: "Служебный аккаунт", note: "Администрация ISG" }
     ];
     return [
-        ...fighters.map(e => ({ ...e, displayRank: "Боец" })),
+        ...fighters.map(e => ({ ...e, displayRank: fighterRankLabel(e.rank) })),
         ...serviceAccounts.filter(account => !fighters.some(f => String(f.callsign).toUpperCase() === account.callsign.toUpperCase()))
     ];
 }
@@ -1056,6 +1056,22 @@ function renderAgentsTable(list) {
     list.forEach(e => { html += `<tr><td>${escapeHtml(e.callsign)}</td><td>${escapeHtml(e.displayRank || "Боец")}</td><td>${escapeHtml(e.status)}</td><td>${escapeHtml(e.note)}</td></tr>`; });
     html += `</table>`;
     return html;
+}
+
+function renderAgentsRefreshIfVisible() {
+    if (activeTab === "agents") {
+        const table = document.getElementById("agentsTable");
+        const search = document.getElementById("agentsSearch");
+        if (table) {
+            const q = String(search?.value || "").toLowerCase();
+            table.innerHTML = renderAgentsTable(getAgentsDirectoryEntries().filter(e =>
+                String(e.callsign).toLowerCase().includes(q) ||
+                String(e.displayRank || "Боец").toLowerCase().includes(q) ||
+                String(e.status || "").toLowerCase().includes(q) ||
+                String(e.note || "").toLowerCase().includes(q)
+            ));
+        }
+    }
 }
 
 function filterAgents() {
@@ -2374,9 +2390,15 @@ function adminEditFighter(encodedCallsign) {
     if (!normalized || (normalized !== fighter.callsign && fighters.some(f => f.callsign.toUpperCase() === normalized)) || normalized === ADMIN_CALLSIGN || normalized === String(councilAccount.callsign).toUpperCase()) { alert("Логин пуст или уже занят."); return; }
     const nextPassword = prompt("Новый пароль:", fighter.password || "");
     if (nextPassword === null || nextPassword.length < 4) { alert("Пароль должен содержать минимум 4 символа."); return; }
-    fighter.callsign = normalized; fighter.password = nextPassword; fighter.sessionVersion = Number(fighter.sessionVersion || 1) + 1;
-    save(STORAGE.fighters, fighters); renderAdmin();
-    alert(`Профиль ${callsign} изменён. Все прежние сессии будут завершены.`);
+    const nextRank = prompt("Новый отображаемый ранг (права доступа не изменяются):", fighter.rank || "Боец");
+    if (nextRank === null) return;
+    if (!nextRank.trim()) { alert("Ранг не может быть пустым."); return; }
+    fighter.callsign = normalized;
+    fighter.password = nextPassword;
+    fighter.rank = nextRank.trim();
+    fighter.sessionVersion = Number(fighter.sessionVersion || 1) + 1;
+    save(STORAGE.fighters, fighters); renderAdmin(); renderAgentsRefreshIfVisible();
+    alert(`Профиль ${callsign} изменён. Ранг обновлён; права доступа не изменены. Все прежние сессии будут завершены.`);
 }
 
 async function adminUpdateCouncil(e) {

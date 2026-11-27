@@ -2436,7 +2436,7 @@ document.addEventListener("keydown", (e) => {
     }
 });
 
-// Короткий механический звук при нажатии на любую кнопку
+// Звук механической клавиатуры: сухой клик переключателя и короткий возвратный щелчок
 let isgAudioContext = null;
 document.addEventListener("click", (event) => {
     const button = event.target.closest("button");
@@ -2448,21 +2448,52 @@ document.addEventListener("click", (event) => {
         if (!isgAudioContext) isgAudioContext = new AudioContextClass();
         if (isgAudioContext.state === "suspended") isgAudioContext.resume();
 
-        const oscillator = isgAudioContext.createOscillator();
-        const gain = isgAudioContext.createGain();
-        const now = isgAudioContext.currentTime;
+        const ctx = isgAudioContext;
+        const now = ctx.currentTime;
 
-        oscillator.type = "triangle";
-        oscillator.frequency.setValueAtTime(720, now);
-        oscillator.frequency.exponentialRampToValueAtTime(240, now + 0.045);
-        gain.gain.setValueAtTime(0.0001, now);
-        gain.gain.exponentialRampToValueAtTime(0.11, now + 0.004);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.055);
+        // Короткий широкополосный импульс имитирует щелчок механического переключателя.
+        const makeClick = (start, duration, volume, frequency) => {
+            const length = Math.max(1, Math.floor(ctx.sampleRate * duration));
+            const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+            const samples = buffer.getChannelData(0);
+            for (let i = 0; i < length; i++) {
+                const fade = Math.pow(1 - i / length, 2.4);
+                samples[i] = (Math.random() * 2 - 1) * fade;
+            }
 
-        oscillator.connect(gain);
-        gain.connect(isgAudioContext.destination);
-        oscillator.start(now);
-        oscillator.stop(now + 0.06);
+            const source = ctx.createBufferSource();
+            const filter = ctx.createBiquadFilter();
+            const gain = ctx.createGain();
+            source.buffer = buffer;
+            filter.type = "bandpass";
+            filter.frequency.setValueAtTime(frequency, start);
+            filter.Q.setValueAtTime(0.85, start);
+            gain.gain.setValueAtTime(volume, start);
+            gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+            source.connect(filter);
+            filter.connect(gain);
+            gain.connect(ctx.destination);
+            source.start(start);
+            source.stop(start + duration);
+        };
+
+        // Основной высокий клик и более тихий звук отпускания клавиши.
+        makeClick(now, 0.022, 0.19, 2850);
+        makeClick(now + 0.027, 0.016, 0.075, 1850);
+
+        // Небольшой низкий корпусной «тук», чтобы звук не был похож на электронный сигнал.
+        const body = ctx.createOscillator();
+        const bodyGain = ctx.createGain();
+        body.type = "sine";
+        body.frequency.setValueAtTime(165, now);
+        body.frequency.exponentialRampToValueAtTime(95, now + 0.035);
+        bodyGain.gain.setValueAtTime(0.0001, now);
+        bodyGain.gain.exponentialRampToValueAtTime(0.045, now + 0.003);
+        bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
+        body.connect(bodyGain);
+        bodyGain.connect(ctx.destination);
+        body.start(now);
+        body.stop(now + 0.045);
     } catch (error) {
         console.warn("[ISG] Не удалось воспроизвести звук кнопки:", error);
     }

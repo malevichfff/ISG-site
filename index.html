@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-10">
+<meta name="isg-build" content="2026-11-27-11">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -453,7 +453,6 @@ tr:hover td { background: rgba(0,255,65,0.05); }
             </div>
             <div class="row">
                 <div style="flex:1;min-width:120px;"><label>РАНГ:</label><select id="fighterRank"><option value="Боец">Боец</option></select></div>
-                <div style="flex:1;min-width:120px;"><label>РОЛЬ:</label><select id="fighterRole"><option value="Боец">Боец</option></select></div>
                 <div style="flex:1;min-width:120px;"><label>СТАТУС:</label><select id="fighterStatus"><option>АКТИВЕН</option><option>НА ЗАДАНИИ</option><option>СКРЫТ</option><option>АРХИВ</option></select></div>
             </div>
             <label>ПОМЕТКА:</label><textarea id="fighterNote" rows="2"></textarea>
@@ -1093,10 +1092,27 @@ function renderAgentsTable(list) {
             : editableService
                 ? `<td><input id="agentServiceRank-${serviceKey}" maxlength="30" value="${escapeHtml(e.displayRank)}" style="min-width:110px;margin:0 0 5px;"><button class="btn small" onclick="adminSaveServiceRank('${serviceKey}')">СОХРАНИТЬ</button></td>`
                 : `<td>${escapeHtml(e.displayRank || "Боец")}</td>`;
-        html += `<tr><td>${escapeHtml(e.callsign)}</td>${rankCell}<td>${escapeHtml(fighter ? (fighter.role || "Боец") : "—")}</td><td>${escapeHtml(e.status)}</td><td>${escapeHtml(e.note)}</td>${isAdmin() ? (fighter ? "<td>Ранг без изменения прав</td>" : (editableService ? "<td>Только отображение, права не меняются</td>" : "<td>—</td>")) : ""}</tr>`;
+        const roleCell = isAdmin() && fighter
+            ? `<td><select id="agentRole-${encodeURIComponent(fighter.callsign)}" style="min-width:110px;margin:0 0 5px;">${["Боец", ...customRoles].filter((role, n, all) => all.indexOf(role) === n).map(role => `<option value="${escapeHtml(role)}" ${String(fighter.role || "Боец") === role ? "selected" : ""}>${escapeHtml(role)}</option>`).join("")}</select><button class="btn small" onclick="adminSaveAgentRole('${encodeURIComponent(fighter.callsign)}')">СОХРАНИТЬ</button></td>`
+            : `<td>${escapeHtml(fighter ? (fighter.role || "Боец") : "—")}</td>`;
+        html += `<tr><td>${escapeHtml(e.callsign)}</td>${rankCell}${roleCell}<td>${escapeHtml(e.status)}</td><td>${escapeHtml(e.note)}</td>${isAdmin() ? (fighter ? "<td>Ранг без изменения прав</td>" : (editableService ? "<td>Только отображение, права не меняются</td>" : "<td>—</td>")) : ""}</tr>`;
     });
     html += `</table>`;
     return html;
+}
+
+function adminSaveAgentRole(encodedCallsign) {
+    if (!isAdmin()) { alert("[ОТКАЗ] Менять роль может только Одесса."); return; }
+    const callsign = decodeURIComponent(encodedCallsign);
+    const fighter = fighters.find(f => String(f.callsign).toUpperCase() === callsign.toUpperCase());
+    const select = document.getElementById("agentRole-" + encodedCallsign);
+    if (!fighter || !select) return;
+    const role = select.value;
+    if (role !== "Боец" && !customRoles.includes(role)) { alert("Выбранная роль больше не существует."); return; }
+    fighter.role = role;
+    save(STORAGE.fighters, fighters);
+    renderAgentsRefreshIfVisible();
+    alert(`Роль бойца ${fighter.callsign} сохранена.`);
 }
 
 function adminSaveAgentRank(encodedCallsign) {
@@ -2394,13 +2410,6 @@ function renderAdmin() {
     fighters.forEach(f => { fhtml += `<tr><td>${escapeHtml(f.callsign)}</td><td>${escapeHtml(fighterRankLabel(f.rank))}</td><td>${escapeHtml(f.status)}</td>${isAdmin()?`<td><button class="btn small" onclick="adminEditFighter('${encodeURIComponent(f.callsign)}')">ИЗМЕНИТЬ</button> <button class="btn danger small" onclick="removeFighter('${encodeURIComponent(f.callsign)}')">КИК / УДАЛИТЬ</button></td>`:""}</tr>`; });
     fhtml += `</table>`;
     document.getElementById("adminFightersList").innerHTML = fhtml;
-    const fighterRoleSelect = document.getElementById("fighterRole");
-    if (fighterRoleSelect) {
-        const selectedRole = fighterRoleSelect.value || "Боец";
-        const availableRoles = ["Боец", ...customRoles].filter((role, index, all) => all.indexOf(role) === index);
-        fighterRoleSelect.innerHTML = availableRoles.map(role => `<option value="${escapeHtml(role)}">${escapeHtml(role)}</option>`).join("");
-        fighterRoleSelect.value = availableRoles.includes(selectedRole) ? selectedRole : "Боец";
-    }
     const rolesManager = document.getElementById("adminRolesManager");
     if (rolesManager) rolesManager.innerHTML = isAdmin() ? renderCustomRolesManager() : "";
     const accountControls = document.getElementById("adminAccountControls");
@@ -2444,12 +2453,6 @@ function renderCustomRolesManager() {
         customRoles.forEach((role, i) => { html += `<tr><td>${escapeHtml(role)}</td><td><button class="btn small" onclick="adminRenameCustomRole(${i})">ПЕРЕИМЕНОВАТЬ</button> <button class="btn danger small" onclick="adminDeleteCustomRole(${i})">УДАЛИТЬ</button></td></tr>`; });
         html += "</table>";
     } else html += "<p class=\"text-warn\">// Дополнительных ролей пока нет</p>";
-    html += "<h3 class=\"mt-10\">[ НАЗНАЧЕНИЕ РОЛИ БОЙЦУ ]</h3>";
-    if (!fighters.length) return html + "<p class=\"text-warn\">// Нет зарегистрированных бойцов</p>";
-    fighters.forEach((fighter, i) => {
-        const options = ["Боец", ...customRoles].filter((role, n, all) => all.indexOf(role) === n);
-        html += `<div class="row" style="margin:8px 0;"><span style="min-width:130px;">${escapeHtml(fighter.callsign)}</span><select id="customRoleAssign-${i}" style="flex:1;min-width:130px;margin:0;">${options.map(role => `<option value="${escapeHtml(role)}" ${String(fighter.role || "Боец") === role ? "selected" : ""}>${escapeHtml(role)}</option>`).join("")}</select><button class="btn small" onclick="adminAssignFighterRole(${i})">НАЗНАЧИТЬ</button></div>`;
-    });
     return html;
 }
 
@@ -2477,25 +2480,17 @@ function adminDeleteCustomRole(index) {
     save("settings/customRoles", customRoles); save(STORAGE.fighters, fighters); renderAdmin(); renderAgentsRefreshIfVisible();
 }
 
-function adminAssignFighterRole(index) {
-    if (!isAdmin()) return; const fighter = fighters[index]; if (!fighter) return;
-    const select = document.getElementById(`customRoleAssign-${index}`); if (!select) return;
-    const role = select.value; if (role !== "Боец" && !customRoles.includes(role)) { alert("Выбранная роль больше не существует."); return; }
-    fighter.role = role; save(STORAGE.fighters, fighters); renderAdmin(); renderAgentsRefreshIfVisible();
-}
 function registerFighter(e) {
     e.preventDefault();
     if (!isSovet()) return;
     const callsign = document.getElementById("fighterCallsign").value.trim().toUpperCase();
     const password = document.getElementById("fighterPass").value;
     const rank = document.getElementById("fighterRank").value;
-    const role = document.getElementById("fighterRole")?.value || "Боец";
-    if (role !== "Боец" && !customRoles.includes(role)) { alert("[ОШИБКА] Выбранная роль больше не существует."); return; }
     const status = document.getElementById("fighterStatus").value;
     const note = document.getElementById("fighterNote").value.trim();
     if (fighters.some(f => f.callsign === callsign)) { alert("[ОШИБКА] Уже зарегистрирован."); return; }
     if (callsign === String(councilAccount.callsign || SOVET_CALLSIGN).toUpperCase() || callsign === ADMIN_CALLSIGN) { alert("[ОШИБКА] Позывной зарезервирован."); return; }
-    fighters.push({ callsign, password, rank, role, status, note });
+    fighters.push({ callsign, password, rank, role: "Боец", status, note });
     save(STORAGE.fighters, fighters); e.target.reset(); renderAdmin();
     alert(`[СИСТЕМА] Боец "${callsign}" зарегистрирован. Пароль: ${password}`);
 }

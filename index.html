@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-23">
+<meta name="isg-build" content="2026-11-27-24">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -2317,7 +2317,7 @@ function renderSell() {
         SELL_CATEGORIES.forEach(groupName => {
             if (!groups[groupName] || !groups[groupName].length) return;
             const groupId = "group_" + groupName.replace(/\s+/g, '_');
-            const isCollapsed = collapsedGroups[groupId] === true;
+            const isCollapsed = collapsedGroups[groupId] !== false;
             const count = groups[groupName].length;
             html += `<div class="group-header ${isCollapsed?'is-collapsed':''}" onclick="toggleGroup('${groupId}')" data-group-id="${groupId}">
                 <span class="group-title">${escapeHtml(groupName)}</span>

@@ -2436,6 +2436,38 @@ document.addEventListener("keydown", (e) => {
     }
 });
 
+// Короткий механический звук при нажатии на любую кнопку
+let isgAudioContext = null;
+document.addEventListener("click", (event) => {
+    const button = event.target.closest("button");
+    if (!button || button.disabled) return;
+
+    try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+        if (!isgAudioContext) isgAudioContext = new AudioContextClass();
+        if (isgAudioContext.state === "suspended") isgAudioContext.resume();
+
+        const oscillator = isgAudioContext.createOscillator();
+        const gain = isgAudioContext.createGain();
+        const now = isgAudioContext.currentTime;
+
+        oscillator.type = "triangle";
+        oscillator.frequency.setValueAtTime(720, now);
+        oscillator.frequency.exponentialRampToValueAtTime(240, now + 0.045);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.11, now + 0.004);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.055);
+
+        oscillator.connect(gain);
+        gain.connect(isgAudioContext.destination);
+        oscillator.start(now);
+        oscillator.stop(now + 0.06);
+    } catch (error) {
+        console.warn("[ISG] Не удалось воспроизвести звук кнопки:", error);
+    }
+});
+
 console.log("%c[ISG] Система инициализирована.", "color:#00ff41;font-family:monospace;");
 </script>
 

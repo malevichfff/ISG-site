@@ -1034,24 +1034,35 @@ function renderAgents() {
     let html = `<h1>&gt; ЗАРЕГИСТРИРОВАННЫЕ БОЙЦЫ ISG_</h1>
 <p class="text-warn" style="font-size:12px;">// Действующие агенты. Регистрация — через Совет.</p>
 <div class="row mb-10"><input type="text" id="agentsSearch" placeholder="ПОИСК..." oninput="filterAgents()" style="flex:1;min-width:200px;margin:0;"></div>
-<div id="agentsTable">${renderAgentsTable(fighters)}</div>`;
+<div id="agentsTable">${renderAgentsTable(getAgentsDirectoryEntries())}</div>`;
     if (isSovet()) html += `<div class="ascii-box warn mt-10" data-title="[ УПРАВЛЕНИЕ ]">Регистрация бойцов — через АДМИН-ПАНЕЛЬ (⚙ СОВЕТ).</div>`;
     return html;
+}
+
+function getAgentsDirectoryEntries() {
+    const serviceAccounts = [
+        { callsign: String(councilAccount.callsign || SOVET_CALLSIGN), displayRank: "Совет", status: "Служебный аккаунт", note: "Руководство ISG" },
+        { callsign: "Одесса", displayRank: "Администратор", status: "Служебный аккаунт", note: "Администрация ISG" }
+    ];
+    return [
+        ...fighters.map(e => ({ ...e, displayRank: "Боец" })),
+        ...serviceAccounts.filter(account => !fighters.some(f => String(f.callsign).toUpperCase() === account.callsign.toUpperCase()))
+    ];
 }
 
 function renderAgentsTable(list) {
     if (list.length === 0) return `<p class="text-warn">// Нет записей</p>`;
     let html = `<table><tr><th>ПОЗЫВНОЙ</th><th>РАНГ</th><th>СТАТУС</th><th>ПОМЕТКА</th></tr>`;
-    list.forEach(e => { html += `<tr><td>${escapeHtml(e.callsign)}</td><td>Боец</td><td>${escapeHtml(e.status)}</td><td>${escapeHtml(e.note)}</td></tr>`; });
+    list.forEach(e => { html += `<tr><td>${escapeHtml(e.callsign)}</td><td>${escapeHtml(e.displayRank || "Боец")}</td><td>${escapeHtml(e.status)}</td><td>${escapeHtml(e.note)}</td></tr>`; });
     html += `</table>`;
     return html;
 }
 
 function filterAgents() {
     const q = document.getElementById("agentsSearch").value.toLowerCase();
-    document.getElementById("agentsTable").innerHTML = renderAgentsTable(fighters.filter(e =>
-        e.callsign.toLowerCase().includes(q) || String(e.rank).toLowerCase().includes(q) ||
-        e.status.toLowerCase().includes(q) || e.note.toLowerCase().includes(q)
+    document.getElementById("agentsTable").innerHTML = renderAgentsTable(getAgentsDirectoryEntries().filter(e =>
+        String(e.callsign).toLowerCase().includes(q) || String(e.displayRank || "Боец").toLowerCase().includes(q) ||
+        String(e.status || "").toLowerCase().includes(q) || String(e.note || "").toLowerCase().includes(q)
     ));
 }
 

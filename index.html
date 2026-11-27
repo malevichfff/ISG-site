@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-12">
+<meta name="isg-build" content="2026-11-27-13">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -886,7 +886,7 @@ function forceLogout(message) {
     alert("[СЕАНС ЗАВЕРШЁН] " + message);
 }
 function fighterRankLabel(rank) { return String(rank || "Боец"); }
-function canEditEntries() { return isAdmin(); }
+function canEditEntries() { return currentRole() === "boets" || isAdmin(); }
 function canEditReport(report) { if (isAdmin()) return true; if (!session || currentRole() !== "boets") return false; return report.author === session.callsign; }
 function canDeleteReport(report) { return canEditReport(report); }
 function canManageTabs() { return isAdmin(); }
@@ -1421,7 +1421,7 @@ function renderTrusted() {
         <label>ПОМЕТКА:</label><textarea id="trNote" required></textarea>
         <button type="submit" class="btn small">+ ДОБАВИТЬ</button></form></div>`;
     } else if (!isGuest()) {
-        html += `<div class="ascii-box warn mt-10" data-title="[ ОГРАНИЧЕНИЕ ]">Добавление доверенных — только Высший Совет.</div>`;
+        html += `<div class="ascii-box warn mt-10" data-title="[ ОГРАНИЧЕНИЕ ]">Добавление доверенных — только Администратор.</div>`;
     }
     return html;
 }
@@ -2328,11 +2328,11 @@ function renderReports() {
 function addReport(e) {
     e.preventDefault();
     if (currentRole() !== "boets" && !isAdmin()) {
-        alert("[ОТКАЗ] Отчёты могут публиковать только бойцы ISG и Высший Совет.");
+        alert("[ОТКАЗ] Отчёты могут публиковать только бойцы ISG и Одесса.");
         return;
     }
     const newId = reports.length ? Math.max(...reports.map(x=>x.id))+1 : 1;
-    // Боец всегда публикует отчёт только для бойцов; выбрать доступ Совета может только Совет.
+    // Боец публикует отчёт для бойцов; уровень доступа может выбрать только Одесса.
     const access = isAdmin() ? document.getElementById("repAccess").value : "boets";
     const newReport = { id: newId, title: document.getElementById("repTitle").value.trim(), author: session.callsign, role: session.role, access, date: new Date().toISOString().slice(0,10), text: document.getElementById("repText").value.trim() };
     reports.push(newReport);

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-31">
+<meta name="isg-build" content="2026-11-27-32">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -1210,11 +1210,20 @@ function getAgentsDirectoryEntries() {
         const value = normalizeCallsign(callsign);
         return preferredAgentOrder.findIndex(aliases => aliases.some(alias => normalizeCallsign(alias) === value));
     };
-    return sortAlphabetically(entries, entry => entry.callsign);
+    // Сначала выводим бойцов в утверждённом порядке; остальные идут после них по алфавиту.
+    return [...entries].sort((a, b) => {
+        const ai = orderIndex(a.callsign);
+        const bi = orderIndex(b.callsign);
+        const aKnown = ai >= 0;
+        const bKnown = bi >= 0;
+        if (aKnown && bKnown) return ai - bi;
+        if (aKnown) return -1;
+        if (bKnown) return 1;
+        return String(a.callsign || "").localeCompare(String(b.callsign || ""), "ru", { sensitivity: "base", numeric: true });
+    });
 }
 
 function renderAgentsTable(list) {
-    list = sortAlphabetically(list, e => e.callsign);
     if (list.length === 0) return `<p class="text-warn">// Нет записей</p>`;
     const canManageRanks = isSovet();
     let html = `<table><tr><th>ПОЗЫВНОЙ</th><th>РАНГ</th><th>РОЛЬ</th><th>СТАТУС</th><th>ПОМЕТКА</th>${canManageRanks ? "<th>ИЗМЕНИТЬ РАНГ</th>" : ""}</tr>`;

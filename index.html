@@ -1091,7 +1091,8 @@ function getAgentsDirectoryEntries() {
 
 function renderAgentsTable(list) {
     if (list.length === 0) return `<p class="text-warn">// Нет записей</p>`;
-    let html = `<table><tr><th>ПОЗЫВНОЙ</th><th>РАНГ</th><th>РОЛЬ</th><th>СТАТУС</th><th>ПОМЕТКА</th>${isAdmin() ? "<th>ИЗМЕНИТЬ РАНГ</th>" : ""}</tr>`;
+    const adminOnly = isAdmin();
+    let html = `<table><tr><th>ПОЗЫВНОЙ</th><th>РАНГ</th><th>РОЛЬ</th><th>СТАТУС</th><th>ПОМЕТКА</th>${adminOnly ? "<th>ИЗМЕНИТЬ РАНГ</th>" : ""}</tr>`;
     list.forEach(e => {
         const fighter = fighters.find(f => String(f.callsign).toUpperCase() === String(e.callsign).toUpperCase());
         const serviceKey = e.serviceRankKey;
@@ -1107,7 +1108,7 @@ function renderAgentsTable(list) {
             : isAdmin() && e.serviceRoleKey
                 ? `<td><select id="agentServiceRole-${e.serviceRoleKey}" style="min-width:110px;margin:0 0 5px;">${roleOptions.map(role => `<option value="${escapeHtml(role)}" ${String(e.role || (e.serviceRoleKey === "admin" ? "Одесса" : "Совет")) === role ? "selected" : ""}>${escapeHtml(role)}</option>`).join("")}</select><button class="btn small" onclick="adminSaveServiceRole('${e.serviceRoleKey}')">СОХРАНИТЬ</button></td>`
                 : `<td>${escapeHtml(fighter ? (fighter.role || "Боец") : (e.role || "—"))}</td>`;
-        html += `<tr><td>${escapeHtml(e.callsign)}</td>${rankCell}${roleCell}<td>${escapeHtml(e.status)}</td><td>${escapeHtml(e.note)}</td>${isAdmin() ? (fighter ? "<td>Ранг без изменения прав</td>" : (editableService ? "<td>Только отображение, права не меняются</td>" : "<td>—</td>")) : ""}</tr>`;
+        html += `<tr><td>${escapeHtml(e.callsign)}</td>${rankCell}${roleCell}<td>${escapeHtml(e.status)}</td><td>${escapeHtml(e.note)}</td>${adminOnly ? (fighter ? "<td>Ранг без изменения прав</td>" : (editableService ? "<td>Только отображение, права не меняются</td>" : "<td>—</td>")) : ""}</tr>`;
     });
     html += `</table>`;
     return html;

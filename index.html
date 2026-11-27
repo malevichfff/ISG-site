@@ -2439,7 +2439,7 @@ function openAdmin() {
 
 function renderAdminPanelInline() {
     const modal = document.getElementById("adminModal");
-    const panel = modal?.querySelector(".modal-content.warn");
+    const panel = modal?.querySelector(".modal-content.warn") || document.querySelector("#content > .modal-content.warn");
     const content = document.getElementById("content");
     if (!modal || !panel || !content) return;
     if (!document.getElementById("adminPanelPlaceholder")) {

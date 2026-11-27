@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-28">
+<meta name="isg-build" content="2026-11-27-29">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -1352,16 +1352,57 @@ function renderStalkers() {
 function renderStalkersTable(list) {
     if (list.length === 0) return `<p class="text-warn">// Нет записей</p>`;
     const actions = canEditEntries();
-    let html = `<table><tr><th>ФОТО</th><th>ПОЗЫВНОЙ</th><th>РАНГ</th><th>СТАТУС</th><th>ДАТА РОЖД.</th><th>ПОМЕТКА</th>${actions?'<th>ДЕЙСТВИЕ</th>':''}</tr>`;
+    const canTransfer = isSovet();
+    let html = `<table><tr><th>ФОТО</th><th>ПОЗЫВНОЙ</th><th>РАНГ</th><th>СТАТУС</th><th>ДАТА РОЖД.</th><th>ПОМЕТКА</th>${actions?'<th>ДЕЙСТВИЕ</th>':''}${canTransfer?'<th>ДОВЕРЕННЫЕ</th>':''}</tr>`;
     list.forEach(e => {
         const photo = e.photo ? `<img src="${e.photo}" class="photo-thumb" onclick="openPhoto('${escapeHtml(e.photo)}','${escapeHtml(e.callsign)}')">` : '<span class="text-warn">—</span>';
         const rankCell = actions
             ? `<select class="stalker-rank-select" aria-label="Ранг сталкера" onchange="updateStalkerRank(${e.id}, this.value)">${[1,2,3,4,5].map(rank => `<option value="${rank}" ${String(e.rank)===String(rank)?'selected':''}>${rank}</option>`).join('')}</select>`
             : escapeHtml(e.rank);
-        html += `<tr><td>${photo}</td><td>${escapeHtml(e.callsign)}</td><td>${rankCell}</td><td>${escapeHtml(e.status)}</td><td>${e.birthDate||'—'}</td><td>${escapeHtml(e.note)}</td>${actions?`<td><button class="btn warn small" onclick="editStalker(${e.id})">✎</button> <button class="btn small" onclick="openStalkerPhotoEditor(${e.id})">ФОТО</button> <button class="btn danger small" onclick="deleteStalker(${e.id})">×</button></td>`:''}</tr>`;
+        html += `<tr><td>${photo}</td><td>${escapeHtml(e.callsign)}</td><td>${rankCell}</td><td>${escapeHtml(e.status)}</td><td>${e.birthDate||'—'}</td><td>${escapeHtml(e.note)}</td>${actions?`<td><button class="btn warn small" onclick="editStalker(${e.id})">✎</button> <button class="btn small" onclick="openStalkerPhotoEditor(${e.id})">ФОТО</button> <button class="btn danger small" onclick="deleteStalker(${e.id})">×</button></td>`:''}${canTransfer?`<td><button class="btn small" onclick="transferStalkerToTrusted(${e.id})">→ ПЕРЕНЕСТИ</button></td>`:''}</tr>`;
     });
     html += `</table>`;
     return html;
+}
+
+
+async function transferStalkerToTrusted(id) {
+    if (!isSovet()) {
+        alert("[ОТКАЗ] Переносить сталкеров в доверенные может только Совет или Администратор.");
+        return;
+    }
+    const stalker = stalkers.find(item => Number(item.id) === Number(id));
+    if (!stalker) return;
+    if (trusted.some(item => String(item.callsign || "").trim().toLocaleLowerCase("ru") === String(stalker.callsign || "").trim().toLocaleLowerCase("ru"))) {
+        alert("Этот позывной уже находится во вкладке «ДОВЕРЕННЫЕ».");
+        return;
+    }
+    if (!confirm("Перенести сталкера «" + stalker.callsign + "» из базы сталкеров в доверенные? Он будет удалён из исходной вкладки.")) return;
+
+    const nextTrustedId = trusted.length
+        ? Math.max(...trusted.map(item => Number(item.id) || 0)) + 1
+        : 1;
+    const trustedEntry = {
+        ...stalker,
+        id: nextTrustedId
+    };
+
+    const previousStalkers = stalkers.slice();
+    const previousTrusted = trusted.slice();
+    stalkers = stalkers.filter(item => Number(item.id) !== Number(id));
+    trusted = [...trusted, trustedEntry];
+
+    try {
+        await save(STORAGE.trusted, trusted);
+        await save(STORAGE.stalkers, stalkers);
+        renderContent();
+        alert("«" + stalker.callsign + "» перенесён во вкладку «ДОВЕРЕННЫЕ».");
+    } catch (error) {
+        stalkers = previousStalkers;
+        trusted = previousTrusted;
+        renderContent();
+        alert("Не удалось сохранить перенос. Проверьте соединение с Firebase.");
+    }
 }
 
 function updateStalkerRank(id, value) {
@@ -1612,25 +1653,9 @@ function deleteMutant(id) {
 
 function renderTrusted() {
     let html = `<h1>&gt; ДОВЕРЕННЫЕ СТАЛКЕРЫ_</h1>
-<p class="text-warn" style="font-size:12px;">// Проверенные контакты. Клик по фото — просмотр.</p>
+<p class="text-warn" style="font-size:12px;">// Проверенные контакты. Перенос из базы сталкеров доступен Совету и Администратору.</p>
 <div class="row mb-10"><input type="text" id="trustedSearch" placeholder="ПОИСК..." oninput="filterTrusted()" style="flex:1;min-width:200px;margin:0;"></div>
 <div id="trustedTable">${renderTrustedTable(trusted)}</div>`;
-    if (isAdmin()) {
-        html += `<div class="form-block mt-10"><h3>[ ДОБАВИТЬ ДОВЕРЕННОГО — только Одесса ]</h3><form onsubmit="addTrusted(event)">
-        <div class="row">
-            <div style="flex:1;min-width:150px;"><label>ПОЗЫВНОЙ:</label><input type="text" id="trCallsign" required></div>
-            <div style="flex:1;min-width:120px;"><label>СТАТУС:</label><select id="trStatus"><option>АКТИВЕН</option><option>НА ЗАДАНИИ</option><option>В БАРЕРЕ</option><option>ПРОПАЛ</option><option>МЁРТВ</option></select></div>
-            <div style="flex:1;min-width:150px;"><label>ДАТА РОЖДЕНИЯ:</label><input type="date" id="trBirthDate"></div>
-        </div>
-        <label>ФОТО (URL или файл):</label>
-        <input type="text" id="trPhotoUrl" placeholder="https://...">
-        <input type="file" id="trPhotoFile" accept="image/*" onchange="handlePhotoUpload(event, 'trPhotoPreview')">
-        <img id="trPhotoPreview" class="photo-preview" style="display:none;">
-        <label>ПОМЕТКА:</label><textarea id="trNote" required></textarea>
-        <button type="submit" class="btn small">+ ДОБАВИТЬ</button></form></div>`;
-    } else if (!isGuest()) {
-        html += `<div class="ascii-box warn mt-10" data-title="[ ОГРАНИЧЕНИЕ ]">Добавление доверенных — только Администратор.</div>`;
-    }
     return html;
 }
 
@@ -1651,22 +1676,6 @@ function filterTrusted() {
     document.getElementById("trustedTable").innerHTML = renderTrustedTable(trusted.filter(e =>
         e.callsign.toLowerCase().includes(q) || e.status.toLowerCase().includes(q) || e.note.toLowerCase().includes(q)
     ));
-}
-
-function addTrusted(e) {
-    e.preventDefault();
-    if (!isAdmin()) { alert("[ОТКАЗ] Добавлять доверенных может только Одесса."); return; }
-    const newId = trusted.length ? Math.max(...trusted.map(x=>x.id))+1 : 1;
-    const photoPreview = document.getElementById("trPhotoPreview");
-    trusted.push({
-        id: newId,
-        callsign: document.getElementById("trCallsign").value.trim(),
-        status: document.getElementById("trStatus").value,
-        birthDate: document.getElementById("trBirthDate").value,
-        note: document.getElementById("trNote").value.trim(),
-        photo: photoPreview.dataset.photoData || document.getElementById("trPhotoUrl").value.trim() || ""
-    });
-    save(STORAGE.trusted, trusted); renderContent();
 }
 
 function editTrusted(id) {

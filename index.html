@@ -790,6 +790,10 @@ function updateCouncilPresence() {
     }
 }
 
+function sortAlphabetically(list, getValue) {
+    return [...(list || [])].sort((a, b) => String(getValue(a) || "").localeCompare(String(getValue(b) || ""), "ru", { sensitivity: "base", numeric: true }));
+}
+
 function renderCouncilPresenceCount() {
     const node = document.getElementById("councilOnlineCount");
     if (node) node.textContent = `СЕЙЧАС ПОД ЛОГИНОМ «СОВЕТ»: ${councilPresenceCount} ${councilPresenceCount === 1 ? "СЕССИЯ" : "СЕССИЙ"}`;
@@ -1073,7 +1077,7 @@ function renderMenu() {
     let html = "";
     // Вкладка «Доверенные» всегда располагается сразу после «Сталкеры»,
     // даже если в Firebase сохранён старый порядок вкладок.
-    const menuTabs = tabs.slice();
+    const menuTabs = sortAlphabetically(tabs, tab => tab.label);
     const trustedTabIndex = menuTabs.findIndex(tab => tab.id === "trusted");
     if (trustedTabIndex >= 0) {
         const trustedTab = menuTabs.splice(trustedTabIndex, 1)[0];
@@ -1206,17 +1210,11 @@ function getAgentsDirectoryEntries() {
         const value = normalizeCallsign(callsign);
         return preferredAgentOrder.findIndex(aliases => aliases.some(alias => normalizeCallsign(alias) === value));
     };
-    return entries.sort((a, b) => {
-        const ai = orderIndex(a.callsign);
-        const bi = orderIndex(b.callsign);
-        if (ai === -1 && bi === -1) return 0;
-        if (ai === -1) return 1;
-        if (bi === -1) return -1;
-        return ai - bi;
-    });
+    return sortAlphabetically(entries, entry => entry.callsign);
 }
 
 function renderAgentsTable(list) {
+    list = sortAlphabetically(list, e => e.callsign);
     if (list.length === 0) return `<p class="text-warn">// Нет записей</p>`;
     const canManageRanks = isSovet();
     let html = `<table><tr><th>ПОЗЫВНОЙ</th><th>РАНГ</th><th>РОЛЬ</th><th>СТАТУС</th><th>ПОМЕТКА</th>${canManageRanks ? "<th>ИЗМЕНИТЬ РАНГ</th>" : ""}</tr>`;
@@ -1350,6 +1348,7 @@ function renderStalkers() {
 }
 
 function renderStalkersTable(list) {
+    list = sortAlphabetically(list, e => e.callsign);
     if (list.length === 0) return `<p class="text-warn">// Нет записей</p>`;
     const actions = canEditEntries();
     const canTransfer = isSovet();
@@ -1606,7 +1605,7 @@ function renderStalkerTasks() {
     else {
         const actions = canEditEntries();
         html += `<table><tr><th>ПОЗЫВНОЙ</th><th>ВЫДАННОЕ ЗАДАНИЕ</th><th>ДАТА ВЫДАЧИ</th><th>СДАТЬ ДО</th><th>НАГРАДА</th>${actions ? '<th>ДЕЙСТВИЕ</th>' : ''}</tr>`;
-        stalkerTasks.forEach(task => {
+        sortAlphabetically(stalkerTasks, task => task.callsign).forEach(task => {
             html += `<tr><td>${escapeHtml(task.callsign || '—')}</td><td>${escapeHtml(task.description || '')}</td><td>${escapeHtml(task.issueDate || '—')}</td><td>${escapeHtml(task.dueDate || '—')}</td><td>${escapeHtml(task.reward || '—')}</td>${actions ? `<td><button class="btn warn small" onclick="editStalkerTask(${task.id})">✎</button> <button class="btn danger small" onclick="deleteStalkerTask(${task.id})">×</button></td>` : ''}</tr>`;
         });
         html += `</table>`;
@@ -1657,7 +1656,7 @@ function renderMutantDatabase() {
     else {
         const actions = canEditEntries();
         html += `<table><tr><th>МУТАНТ</th><th>ЧТО ПАДАЕТ ПРИ РАЗДЕЛКЕ</th><th>СТОИМОСТЬ</th>${actions ? '<th>ДЕЙСТВИЕ</th>' : ''}</tr>`;
-        mutantDatabase.forEach(m => {
+        sortAlphabetically(mutantDatabase, m => m.name).forEach(m => {
             html += `<tr class="mutant-row" data-search="${escapeHtml((m.name+' '+m.drop).toLocaleLowerCase('ru'))}"><td>${escapeHtml(m.name)}</td><td>${escapeHtml(m.drop)}</td><td>${escapeHtml(m.price)} руб.</td>${actions ? `<td><button class="btn warn small" onclick="editMutant(${m.id})">✎</button> <button class="btn danger small" onclick="deleteMutant(${m.id})">×</button></td>` : ''}</tr>`;
         });
         html += `</table>`;
@@ -1697,6 +1696,7 @@ function renderTrusted() {
 }
 
 function renderTrustedTable(list) {
+    list = sortAlphabetically(list, e => e.callsign);
     if (list.length === 0) return `<p class="text-warn">// Нет записей</p>`;
     const actions = isAdmin();
     const canTransfer = isSovet();
@@ -2223,7 +2223,7 @@ function renderBuy() {
     else {
         const actions = canEditEntries();
         BUY_GROUPS.forEach(groupName => {
-            const items = buy.filter(b => b.group === groupName);
+            const items = sortAlphabetically(buy.filter(b => b.group === groupName), b => b.item);
             if (!items.length) return;
             const groupId = "buy_" + groupName.toLowerCase();
             html += `<div class="group-header" onclick="toggleGroup('${groupId}')" data-group-id="${groupId}"><span class="group-title">${escapeHtml(groupName.toUpperCase())}</span><span class="group-count">[${items.length}]</span><span class="group-toggle">−</span></div><div class="group-content" id="content_${groupId}"><table><tr><th>ТОВАР</th><th>ЦЕНА</th>${actions?'<th>ДЕЙСТВИЕ</th>':''}</tr>`;
@@ -2391,7 +2391,7 @@ function renderSell() {
             </div>
             <div class="group-content ${isCollapsed?'collapsed':''}" id="content_${groupId}">
             <table><tr><th>ТОВАР / УСЛУГА</th><th>ЦЕНА</th>${actions?'<th>ДЕЙСТВИЕ</th>':''}</tr>`;
-            groups[groupName].forEach(s => {
+            sortAlphabetically(groups[groupName], item => item.item).forEach(s => {
                 html += `<tr class="catalog-row" data-search="${escapeHtml((s.item+' '+(s.group||'')).toLowerCase())}"><td>${escapeHtml(s.item)}</td><td>${escapeHtml(s.price)}</td>${actions?`<td><button class="btn warn small" onclick="event.stopPropagation();editSell(${s.id})">✎</button> <button class="btn danger small" onclick="event.stopPropagation();deleteSell(${s.id})">×</button></td>`:''}</tr>`;
             });
             html += `</table></div>`;
@@ -2567,7 +2567,7 @@ function renderReports() {
         <label>ТЕКСТ:</label><textarea id="repText" required rows="5"></textarea>
         <button type="submit" class="btn">→ ОПУБЛИКОВАТЬ</button></form></div>`;
     }
-    const sorted = [...reports].sort((a,b) => b.id - a.id);
+    const sorted = sortAlphabetically(reports, report => report.title);
     const visible = sorted.filter(canSeeReport);
     if (visible.length === 0) html += `<p class="text-warn">// Отчётов нет</p>`;
     else visible.forEach(r => {
@@ -2756,7 +2756,7 @@ function renderAdmin() {
     if (!applications.length) ahtml = `<p class="text-warn">// Нет ожидающих заявок</p>`;
     else {
         ahtml = `<table style="font-size:12px;"><tr><th>ПОЗЫВНОЙ</th><th>ДАТА</th><th>РЕШЕНИЕ</th></tr>`;
-        applications.forEach(a => {
+        sortAlphabetically(applications, a => a.callsign).forEach(a => {
             const date = a.submittedAt ? new Date(a.submittedAt).toLocaleString("ru-RU") : "—";
             ahtml += `<tr><td>${escapeHtml(a.callsign)}</td><td>${escapeHtml(date)}</td><td><button class="btn small" onclick="reviewApplication(${Number(a.id)},true)">✓ ДОПУСТИТЬ</button> <button class="btn danger small" onclick="reviewApplication(${Number(a.id)},false)">× ОТКЛОНИТЬ</button></td></tr>`;
         });
@@ -2767,7 +2767,7 @@ function renderAdmin() {
     if (adminOnlySections) adminOnlySections.style.display = isAdmin() ? "" : "none";
 
     let fhtml = "<table style=\"font-size:12px;\"><tr><th>ПОЗЫВНОЙ</th><th>РАНГ</th><th>СТАТУС</th>" + (isSovet() ? "<th>УПРАВЛЕНИЕ</th>" : "") + "</tr>";
-    fighters.forEach(f => {
+    sortAlphabetically(fighters, f => f.callsign).forEach(f => {
         let controls = "";
         if (isAdmin()) controls = '<button class="btn small" onclick="adminEditFighter(\'' + encodeURIComponent(f.callsign) + '\')">ИЗМЕНИТЬ</button> <button class="btn danger small" onclick="removeFighter(\'' + encodeURIComponent(f.callsign) + '\')">УДАЛИТЬ ПРОФИЛЬ</button>';
         else if (currentRole() === "sovet") controls = '<button class="btn danger small" onclick="kickFighter(\'' + encodeURIComponent(f.callsign) + '\')">КИКНУТЬ</button>';
@@ -2790,12 +2790,12 @@ function renderAdmin() {
     renderCouncilPresenceCount();
 
     let html = `<table style="font-size:12px;"><tr><th>ID</th><th>НАЗВАНИЕ</th><th>МИН. РОЛЬ</th><th>ДЕЙСТВИЕ</th></tr>`;
-    tabs.forEach(t => { const locked=["home","reports"].includes(t.id); html += `<tr><td>${escapeHtml(t.id)}</td><td>${escapeHtml(t.label)}</td><td>${t.minRole.toUpperCase()}</td><td>${locked?'<span class="text-warn">базовая</span>':`<button class="btn danger small" onclick="removeTab('${t.id}')">×</button>`}</td></tr>`; });
+    sortAlphabetically(tabs, t => t.label).forEach(t => { const locked=["home","reports"].includes(t.id); html += `<tr><td>${escapeHtml(t.id)}</td><td>${escapeHtml(t.label)}</td><td>${t.minRole.toUpperCase()}</td><td>${locked?'<span class="text-warn">базовая</span>':`<button class="btn danger small" onclick="removeTab('${t.id}')">×</button>`}</td></tr>`; });
     html += `</table>`;
     document.getElementById("adminTabsList").innerHTML = html;
 
     let rhtml = `<table style="font-size:12px;"><tr><th>#</th><th>ЗАГОЛОВОК</th><th>АВТОР</th><th>ДОСТУП</th><th>ДЕЙСТВИЕ</th></tr>`;
-    reports.forEach(r => { rhtml += `<tr><td>${r.id}</td><td>${escapeHtml(r.title)}</td><td>${escapeHtml(r.author)}</td><td>${r.access.toUpperCase()}</td><td><button class="btn danger small" onclick="deleteReport(${r.id});renderAdmin();">×</button></td></tr>`; });
+    sortAlphabetically(reports, r => r.title).forEach(r => { rhtml += `<tr><td>${r.id}</td><td>${escapeHtml(r.title)}</td><td>${escapeHtml(r.author)}</td><td>${r.access.toUpperCase()}</td><td><button class="btn danger small" onclick="deleteReport(${r.id});renderAdmin();">×</button></td></tr>`; });
     rhtml += `</table>`;
     document.getElementById("adminReportsList").innerHTML = rhtml;
     const webhookInput = document.getElementById("discordWebhookInput");
@@ -2898,7 +2898,7 @@ function renderCustomRolesManager() {
     html += "<form onsubmit=\"adminAddCustomRole(event)\" class=\"mt-10\"><label>НАЗВАНИЕ НОВОЙ РОЛИ:</label><input id=\"newCustomRoleName\" maxlength=\"30\" required placeholder=\"Например: Медик, Учёный, Разведчик\"><button class=\"btn small\" type=\"submit\">+ ДОБАВИТЬ РОЛЬ</button></form>";
     if (customRoles.length) {
         html += "<table style=\"font-size:12px;\"><tr><th>РОЛЬ</th><th>ДЕЙСТВИЕ</th></tr>";
-        customRoles.forEach((role, i) => { html += `<tr><td>${escapeHtml(role)}</td><td><button class="btn small" onclick="adminRenameCustomRole(${i})">ПЕРЕИМЕНОВАТЬ</button> <button class="btn danger small" onclick="adminDeleteCustomRole(${i})">УДАЛИТЬ</button></td></tr>`; });
+        sortAlphabetically(customRoles, role => role).forEach(role => { const i = customRoles.indexOf(role); html += `<tr><td>${escapeHtml(role)}</td><td><button class="btn small" onclick="adminRenameCustomRole(${i})">ПЕРЕИМЕНОВАТЬ</button> <button class="btn danger small" onclick="adminDeleteCustomRole(${i})">УДАЛИТЬ</button></td></tr>`; });
         html += "</table>";
     } else html += "<p class=\"text-warn\">// Дополнительных ролей пока нет</p>";
     return html;

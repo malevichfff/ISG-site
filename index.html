@@ -513,6 +513,7 @@ const ADMIN_CALLSIGN = "ADMIN";
 const ADMIN_PASS = "@gp21438903";
 let councilAccount = { callsign: SOVET_CALLSIGN, password: "admin", version: 1 };
 let agentServiceRanks = { admin: "Администратор" };
+let agentDisplayRoles = { admin: "Одесса", council: "Совет" };
 let customRoles = [];
 const ROLE_LEVEL = { guest: 0, boets: 1, sovet: 2, admin: 3 };
 
@@ -636,6 +637,7 @@ let activeTab = "home";
 let councilPresenceRef = null;
 let councilPresenceCount = 0;
 let councilOnlineAgents = [];
+let councilPresenceCache = {};
 let discordWebhookUrl = "";
 let discordCouncilWebhookUrl = "";
 
@@ -710,7 +712,7 @@ function updateCouncilPresence() {
     if (!db || !councilPresenceRef) return;
     if (currentRole() === "sovet") {
         councilPresenceRef.onDisconnect().remove().catch(err => console.warn("Council presence disconnect setup:", err));
-        councilPresenceRef.set({ callsign: String(session.callsign || "").trim().toUpperCase(), connectedAt: firebase.database.ServerValue.TIMESTAMP })
+        councilPresenceRef.set({ callsign: String(session.callsign || "").trim().toUpperCase(), role: agentDisplayRoles.council || "Совет", connectedAt: firebase.database.ServerValue.TIMESTAMP })
             .catch(err => console.warn("Council presence update:", err));
     } else {
         councilPresenceRef.remove().catch(err => console.warn("Council presence removal:", err));
@@ -733,6 +735,10 @@ async function initFirebase() {
             if (document.getElementById("adminModal")?.classList.contains("open")) renderAdmin();
             renderAgentsRefreshIfVisible();
         }, error => console.warn("Custom roles listener:", error));
+        db.ref(`${ROOT_PATH}/settings/agentDisplayRoles`).on("value", snapshot => {
+            agentDisplayRoles = { admin: "Одесса", council: "Совет", ...(snapshot.val() || {}) };
+            renderAgentsRefreshIfVisible();
+        }, error => console.warn("Display roles listener:", error));
         db.ref(`${ROOT_PATH}/settings/agentServiceRanks`).on("value", snapshot => {
             agentServiceRanks = { admin: "Администратор", ...(snapshot.val() || {}) };
             renderAgentsRefreshIfVisible();
@@ -754,6 +760,7 @@ async function initFirebase() {
         councilPresenceRef = db.ref(`${ROOT_PATH}/councilPresence`).push();
         db.ref(`${ROOT_PATH}/councilPresence`).on("value", snapshot => {
             const presence = snapshot.val() || {};
+            councilPresenceCache = presence;
             councilPresenceCount = Object.keys(presence).length;
             councilOnlineAgents = [...new Set(Object.values(presence)
                 .map(entry => String(entry?.callsign || "").trim().toUpperCase())
@@ -763,6 +770,8 @@ async function initFirebase() {
             if (document.getElementById("adminModal")?.classList.contains("open")) renderAdmin();
         }, error => console.warn("Council presence listener:", error));
         updateCouncilPresence();
+        const displayRolesSnapshot = await db.ref(`${ROOT_PATH}/settings/agentDisplayRoles`).once("value");
+        agentDisplayRoles = { admin: "Одесса", council: "Совет", ...(displayRolesSnapshot.val() || {}) };
         const rolesSnapshot = await db.ref(`${ROOT_PATH}/settings/customRoles`).once("value");
         if (rolesSnapshot.exists()) customRoles = normalizeList(rolesSnapshot.val()).map(x => String(x || "").trim()).filter(Boolean);
         else await db.ref(`${ROOT_PATH}/settings/customRoles`).set([]);
@@ -1064,7 +1073,7 @@ function renderAgents() {
 
 function getAgentsDirectoryEntries() {
     const serviceAccounts = [
-        { callsign: "Одесса", serviceRankKey: "admin", displayRank: agentServiceRanks.admin || "Администратор", status: "Служебный аккаунт", note: "Администрация ISG" }
+        { callsign: "Одесса", serviceRankKey: "admin", serviceRoleKey: "admin", displayRank: agentServiceRanks.admin || "Администратор", role: agentDisplayRoles.admin || "Одесса", status: "Служебный аккаунт", note: "Администрация ISG" }
     ];
     const knownCallsigns = new Set([
         ...fighters.map(f => String(f.callsign || "").toUpperCase()),
@@ -1072,7 +1081,7 @@ function getAgentsDirectoryEntries() {
     ]);
     const onlineCouncilEntries = councilOnlineAgents
         .filter(callsign => !knownCallsigns.has(callsign))
-        .map(callsign => ({ callsign, displayRank: "—", status: "АКТИВЕН", note: "На связи" }));
+        .map(callsign => { const online = Object.values(councilPresenceCache || {}).find(entry => String(entry?.callsign || "").trim().toUpperCase() === callsign); return { callsign, displayRank: "—", role: online?.role || agentDisplayRoles.council || "Совет", serviceRoleKey: "council", status: "АКТИВЕН", note: "На связи" }; });
     return [
         ...fighters.map(e => ({ ...e, displayRank: fighterRankLabel(e.rank) })),
         ...serviceAccounts.filter(account => !fighters.some(f => String(f.callsign).toUpperCase() === account.callsign.toUpperCase())),
@@ -1092,9 +1101,12 @@ function renderAgentsTable(list) {
             : editableService
                 ? `<td><input id="agentServiceRank-${serviceKey}" maxlength="30" value="${escapeHtml(e.displayRank)}" style="min-width:110px;margin:0 0 5px;"><button class="btn small" onclick="adminSaveServiceRank('${serviceKey}')">СОХРАНИТЬ</button></td>`
                 : `<td>${escapeHtml(e.displayRank || "Боец")}</td>`;
+        const roleOptions = ["Боец", "Одесса", "Совет", ...customRoles].filter((role, n, all) => all.indexOf(role) === n);
         const roleCell = isAdmin() && fighter
             ? `<td><select id="agentRole-${encodeURIComponent(fighter.callsign)}" style="min-width:110px;margin:0 0 5px;">${["Боец", ...customRoles].filter((role, n, all) => all.indexOf(role) === n).map(role => `<option value="${escapeHtml(role)}" ${String(fighter.role || "Боец") === role ? "selected" : ""}>${escapeHtml(role)}</option>`).join("")}</select><button class="btn small" onclick="adminSaveAgentRole('${encodeURIComponent(fighter.callsign)}')">СОХРАНИТЬ</button></td>`
-            : `<td>${escapeHtml(fighter ? (fighter.role || "Боец") : "—")}</td>`;
+            : isAdmin() && e.serviceRoleKey
+                ? `<td><select id="agentServiceRole-${e.serviceRoleKey}" style="min-width:110px;margin:0 0 5px;">${roleOptions.map(role => `<option value="${escapeHtml(role)}" ${String(e.role || (e.serviceRoleKey === "admin" ? "Одесса" : "Совет")) === role ? "selected" : ""}>${escapeHtml(role)}</option>`).join("")}</select><button class="btn small" onclick="adminSaveServiceRole('${e.serviceRoleKey}')">СОХРАНИТЬ</button></td>`
+                : `<td>${escapeHtml(fighter ? (fighter.role || "Боец") : (e.role || "—"))}</td>`;
         html += `<tr><td>${escapeHtml(e.callsign)}</td>${rankCell}${roleCell}<td>${escapeHtml(e.status)}</td><td>${escapeHtml(e.note)}</td>${isAdmin() ? (fighter ? "<td>Ранг без изменения прав</td>" : (editableService ? "<td>Только отображение, права не меняются</td>" : "<td>—</td>")) : ""}</tr>`;
     });
     html += `</table>`;
@@ -1113,6 +1125,21 @@ function adminSaveAgentRole(encodedCallsign) {
     save(STORAGE.fighters, fighters);
     renderAgentsRefreshIfVisible();
     alert(`Роль бойца ${fighter.callsign} сохранена.`);
+}
+
+async function adminSaveServiceRole(key) {
+    if (!isAdmin() || !db || !["admin", "council"].includes(key)) { alert("[ОТКАЗ] Менять отображаемую роль служебных аккаунтов может только Одесса."); return; }
+    const select = document.getElementById("agentServiceRole-" + key);
+    const role = String(select?.value || "").trim();
+    const allowed = ["Одесса", "Совет", "Боец", ...customRoles];
+    if (!allowed.includes(role)) { alert("Выбранная роль больше не существует."); return; }
+    try {
+        await db.ref(`${ROOT_PATH}/settings/agentDisplayRoles/${key}`).set(role);
+        agentDisplayRoles[key] = role;
+        if (key === "council" && currentRole() === "sovet") await updateCouncilPresence();
+        renderAgentsRefreshIfVisible();
+        alert(`Отображаемая роль аккаунта ${key === "admin" ? "Одесса" : "Совет"} сохранена. Системные права не изменены.`);
+    } catch (error) { alert("Не удалось сохранить роль: " + (error.message || error)); }
 }
 
 function adminSaveAgentRank(encodedCallsign) {

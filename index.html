@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-20">
+<meta name="isg-build" content="2026-11-27-21">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -534,6 +534,26 @@ tr:hover td { background: rgba(0,255,65,0.05); }
     <button class="photo-close" onclick="closePhotoModalDirect()">×</button>
     <img id="photoModalImg" src="" alt="">
     <div class="photo-info" id="photoModalInfo"></div>
+</div>
+
+<div class="modal" id="stalkerPhotoEditModal">
+    <div class="modal-content">
+        <button class="modal-close" type="button" onclick="closeStalkerPhotoEditor()">×</button>
+        <h2>&gt; ИЗМЕНИТЬ ФОТО СТАЛКЕРА_</h2>
+        <p class="text-warn" id="stalkerPhotoEditName"></p>
+        <label>НОВАЯ ССЫЛКА НА ФОТО (необязательно):</label>
+        <input type="text" id="stalkerEditPhotoUrl" placeholder="https://...">
+        <label>ИЛИ ВЫБЕРИ ФАЙЛ:</label>
+        <input type="file" id="stalkerEditPhotoFile" accept="image/*" onchange="handlePhotoUpload(event, 'stalkerEditPhotoPreview')">
+        <div id="stalkerEditPhotoPasteArea" class="photo-paste-area" tabindex="0" role="textbox" aria-label="Область вставки фотографии" onpaste="handlePhotoPaste(event, 'stalkerEditPhotoPreview')">📋 Нажми сюда и вставь новое изображение сочетанием Ctrl+V</div>
+        <div id="stalkerEditPhotoPasteStatus" class="photo-paste-status">Текущее фото показано ниже. Новое изображение заменит его после сохранения.</div>
+        <img id="stalkerEditPhotoPreview" class="photo-preview" style="display:none;max-width:100%;width:auto;height:auto;max-height:220px;object-fit:contain;">
+        <div class="row mt-10">
+            <button type="button" class="btn small" onclick="saveStalkerPhotoEdit()">СОХРАНИТЬ ФОТО</button>
+            <button type="button" class="btn danger small" onclick="removeStalkerPhotoEdit()">УДАЛИТЬ ФОТО</button>
+            <button type="button" class="btn warn small" onclick="closeStalkerPhotoEditor()">ОТМЕНА</button>
+        </div>
+    </div>
 </div>
 
 <footer style="text-align:center;padding:20px;border-top:1px dashed #00ff41;color:#00ff41;font-size:11px;opacity:0.7;background:rgba(10,10,10,0.9);">
@@ -1308,7 +1328,7 @@ function renderStalkersTable(list) {
         const rankCell = actions
             ? `<select class="stalker-rank-select" aria-label="Ранг сталкера" onchange="updateStalkerRank(${e.id}, this.value)">${[1,2,3,4,5].map(rank => `<option value="${rank}" ${String(e.rank)===String(rank)?'selected':''}>${rank}</option>`).join('')}</select>`
             : escapeHtml(e.rank);
-        html += `<tr><td>${photo}</td><td>${escapeHtml(e.callsign)}</td><td>${rankCell}</td><td>${escapeHtml(e.status)}</td><td>${e.birthDate||'—'}</td><td>${escapeHtml(e.note)}</td>${actions?`<td><button class="btn warn small" onclick="editStalker(${e.id})">✎</button> <button class="btn danger small" onclick="deleteStalker(${e.id})">×</button></td>`:''}</tr>`;
+        html += `<tr><td>${photo}</td><td>${escapeHtml(e.callsign)}</td><td>${rankCell}</td><td>${escapeHtml(e.status)}</td><td>${e.birthDate||'—'}</td><td>${escapeHtml(e.note)}</td>${actions?`<td><button class="btn warn small" onclick="editStalker(${e.id})">✎</button> <button class="btn small" onclick="openStalkerPhotoEditor(${e.id})">ФОТО</button> <button class="btn danger small" onclick="deleteStalker(${e.id})">×</button></td>`:''}</tr>`;
     });
     html += `</table>`;
     return html;
@@ -1343,9 +1363,10 @@ function showStalkerPhotoFile(file, previewId) {
         img.src = e.target.result;
         img.style.display = "block";
         img.dataset.photoData = e.target.result;
-        const status = document.getElementById("stPhotoPasteStatus");
+        const isEditor = previewId === "stalkerEditPhotoPreview";
+        const status = document.getElementById(isEditor ? "stalkerEditPhotoPasteStatus" : "stPhotoPasteStatus");
         if (status) status.textContent = "✓ Фотография загружена и готова к сохранению.";
-        const urlInput = document.getElementById("stPhotoUrl");
+        const urlInput = document.getElementById(isEditor ? "stalkerEditPhotoUrl" : "stPhotoUrl");
         if (urlInput) urlInput.value = "";
     };
     reader.onerror = () => alert("Не удалось прочитать изображение. Попробуйте другой файл.");
@@ -1410,6 +1431,56 @@ function editStalker(id) {
     s.status = normalizedStatus; s.birthDate = birthDate.trim();
     s.photo = photo.trim(); s.note = note.trim()||s.note;
     save(STORAGE.stalkers, stalkers); renderContent();
+}
+
+let editingStalkerPhotoId = null;
+
+function openStalkerPhotoEditor(id) {
+    if (!canEditEntries()) return;
+    const stalker = stalkers.find(item => Number(item.id) === Number(id));
+    if (!stalker) return;
+    editingStalkerPhotoId = stalker.id;
+    const preview = document.getElementById("stalkerEditPhotoPreview");
+    preview.dataset.photoData = "";
+    preview.src = stalker.photo || "";
+    preview.style.display = stalker.photo ? "block" : "none";
+    document.getElementById("stalkerPhotoEditName").textContent = "[ " + stalker.callsign + " ]";
+    document.getElementById("stalkerEditPhotoUrl").value = stalker.photo && !stalker.photo.startsWith("data:image/") ? stalker.photo : "";
+    document.getElementById("stalkerEditPhotoPasteStatus").textContent = stalker.photo ? "Текущее фото показано ниже. Вставь или выбери новое, чтобы заменить его." : "У этого сталкера пока нет фотографии.";
+    document.getElementById("stalkerEditPhotoFile").value = "";
+    document.getElementById("stalkerPhotoEditModal").classList.add("open");
+}
+
+function closeStalkerPhotoEditor() {
+    document.getElementById("stalkerPhotoEditModal").classList.remove("open");
+    editingStalkerPhotoId = null;
+}
+
+function saveStalkerPhotoEdit() {
+    if (!canEditEntries() || editingStalkerPhotoId === null) return;
+    const stalker = stalkers.find(item => Number(item.id) === Number(editingStalkerPhotoId));
+    if (!stalker) return;
+    const preview = document.getElementById("stalkerEditPhotoPreview");
+    const url = document.getElementById("stalkerEditPhotoUrl").value.trim();
+    const nextPhoto = preview.dataset.photoData || url;
+    if (!nextPhoto) {
+        alert("Вставь изображение, выбери файл или укажи ссылку. Для удаления используй кнопку «Удалить фото».");
+        return;
+    }
+    stalker.photo = nextPhoto;
+    save(STORAGE.stalkers, stalkers);
+    closeStalkerPhotoEditor();
+    renderContent();
+}
+
+function removeStalkerPhotoEdit() {
+    if (!canEditEntries() || editingStalkerPhotoId === null) return;
+    const stalker = stalkers.find(item => Number(item.id) === Number(editingStalkerPhotoId));
+    if (!stalker || !confirm("Удалить фотографию сталкера «" + stalker.callsign + "»?")) return;
+    stalker.photo = "";
+    save(STORAGE.stalkers, stalkers);
+    closeStalkerPhotoEditor();
+    renderContent();
 }
 
 function deleteStalker(id) {

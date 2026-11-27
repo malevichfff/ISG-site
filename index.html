@@ -67,12 +67,23 @@ header {
 }
 
 .logo {
+    appearance: none;
+    -webkit-appearance: none;
+    display: inline-flex;
+    align-items: center;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    background: transparent !important;
+    box-shadow: none;
+    font-family: inherit;
     font-size: 28px;
     font-weight: bold;
     letter-spacing: 4px;
     color: #00ff41;
     text-shadow: 0 0 5px #00ff41, 0 0 10px #00ff41, 0 0 20px #00ff41;
     cursor: pointer;
+    text-align: left;
 }
 .logo:focus-visible { outline: 1px dashed #ffb000; outline-offset: 5px; }
 .logo-expansion {
@@ -451,7 +462,7 @@ tr:hover td { background: rgba(0,255,65,0.05); }
 <body>
 
 <header>
-    <button class="logo" type="button" aria-expanded="false" aria-label="ISG — показать расшифровку" onclick="switchTab('home'); this.classList.toggle('isg-expanded'); this.setAttribute('aria-expanded', this.classList.contains('isg-expanded'))"><span>[ ISG ]</span><span class="logo-expansion">INTERNATIONAL SCIENTIFIC GROUP</span></button>
+    <button class="logo" type="button" aria-expanded="false" aria-label="ISG — показать расшифровку" onclick="this.classList.toggle('isg-expanded'); this.setAttribute('aria-expanded', this.classList.contains('isg-expanded'))"><span>[ ISG ]</span><span class="logo-expansion">INTERNATIONAL SCIENTIFIC GROUP</span></button>
     <div class="status-bar">
         <div class="status-item online">● СИСТЕМА: ONLINE</div>
         <div class="status-item warn">УЗЕЛ: <span id="nodeId">ISG-7734</span></div>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-33">
+<meta name="isg-build" content="2026-11-27-34">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -85,24 +85,39 @@ header {
 .logo:focus-visible { outline: 1px dashed #ffb000; outline-offset: 5px; }
 .logo-expansion {
     display: inline-block;
-    max-width: 0;
+    width: 0;
     margin-left: 0;
     overflow: hidden;
     opacity: 0;
-    transform: translateX(-10px);
+    transform: translate3d(-14px, 0, 0);
+    filter: blur(3px);
     white-space: nowrap;
     font-size: 11px;
-    line-height: 1.4;
+    line-height: 1.5;
     letter-spacing: 2px;
     color: #ffb000;
     text-shadow: 0 0 7px rgba(255,176,0,0.65);
-    transition: max-width 650ms ease, margin-left 450ms ease, opacity 450ms ease, transform 650ms ease;
+    will-change: width, opacity, transform, filter;
+    transition:
+        width 1100ms cubic-bezier(0.22, 1, 0.36, 1),
+        margin-left 900ms cubic-bezier(0.22, 1, 0.36, 1),
+        opacity 850ms ease,
+        transform 1100ms cubic-bezier(0.22, 1, 0.36, 1),
+        filter 1100ms ease;
 }
 .logo.isg-expanded .logo-expansion {
-    max-width: 360px;
+    width: 360px;
     margin-left: 16px;
     opacity: 1;
-    transform: translateX(0);
+    transform: translate3d(0, 0, 0);
+    filter: blur(0);
+}
+@media (max-width: 700px) {
+    .logo.isg-expanded .logo-expansion {
+        width: min(360px, calc(100vw - 150px));
+        font-size: 9px;
+        letter-spacing: 1px;
+    }
 }
 @media (prefers-reduced-motion: reduce) {
     .logo-expansion { transition: none; }
@@ -459,7 +474,7 @@ tr:hover td { background: rgba(0,255,65,0.05); }
 <body>
 
 <header>
-    <button class="logo" type="button" aria-expanded="false" aria-label="ISG — показать расшифровку" onclick="switchTab('home'); this.classList.toggle('isg-expanded'); this.setAttribute('aria-expanded', this.classList.contains('isg-expanded'))"><span>[ ISG ]</span><span class="logo-expansion">INTERNATIONAL SCIENTIFIC GROUP</span></button>
+    <button class="logo" type="button" aria-expanded="false" aria-label="ISG — показать расшифровку" onclick="this.classList.toggle('isg-expanded'); this.setAttribute('aria-expanded', this.classList.contains('isg-expanded'))"><span>[ ISG ]</span><span class="logo-expansion">INTERNATIONAL SCIENTIFIC GROUP</span></button>
     <div class="status-bar">
         <div class="status-item online">● СИСТЕМА: ONLINE</div>
         <div class="status-item warn">УЗЕЛ: <span id="nodeId">ISG-7734</span></div>

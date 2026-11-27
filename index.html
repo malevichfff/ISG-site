@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="isg-build" content="2026-11-27-01">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -2503,6 +2504,40 @@ document.addEventListener("click", (event) => {
 });
 
 console.log("%c[ISG] Система инициализирована.", "color:#00ff41;font-family:monospace;");
+</script>
+
+<script>
+// ISG_AUTO_UPDATE: проверяем публикацию новой версии каждую минуту.
+(() => {
+    const currentBuild = document.querySelector('meta[name="isg-build"]')?.content;
+    if (!currentBuild) return;
+
+    let checking = false;
+    setInterval(async () => {
+        if (checking || document.visibilityState === "hidden") return;
+        checking = true;
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.set("isg_version_check", Date.now().toString());
+            const response = await fetch(url.toString(), {
+                method: "GET",
+                cache: "no-store",
+                headers: { "Cache-Control": "no-cache" }
+            });
+            if (!response.ok) return;
+
+            const html = await response.text();
+            const match = html.match(/<meta\\s+name=["']isg-build["']\\s+content=["']([^"']+)["']/i);
+            if (match && match[1] !== currentBuild) {
+                window.location.reload();
+            }
+        } catch (error) {
+            console.debug("[ISG] Проверка обновления временно недоступна:", error);
+        } finally {
+            checking = false;
+        }
+    }, 60000);
+})();
 </script>
 
 </body>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-02">
+<meta name="isg-build" content="2026-11-27-03">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -1052,10 +1052,30 @@ function getAgentsDirectoryEntries() {
 
 function renderAgentsTable(list) {
     if (list.length === 0) return `<p class="text-warn">// Нет записей</p>`;
-    let html = `<table><tr><th>ПОЗЫВНОЙ</th><th>РАНГ</th><th>СТАТУС</th><th>ПОМЕТКА</th></tr>`;
-    list.forEach(e => { html += `<tr><td>${escapeHtml(e.callsign)}</td><td>${escapeHtml(e.displayRank || "Боец")}</td><td>${escapeHtml(e.status)}</td><td>${escapeHtml(e.note)}</td></tr>`; });
+    let html = `<table><tr><th>ПОЗЫВНОЙ</th><th>РАНГ</th><th>СТАТУС</th><th>ПОМЕТКА</th>${isAdmin() ? "<th>ИЗМЕНИТЬ РАНГ</th>" : ""}</tr>`;
+    list.forEach(e => {
+        const fighter = fighters.find(f => String(f.callsign).toUpperCase() === String(e.callsign).toUpperCase());
+        const rankCell = isAdmin() && fighter
+            ? `<td><input id="agentRank-${encodeURIComponent(fighter.callsign)}" maxlength="30" value="${escapeHtml(fighter.rank || "Боец")}" style="min-width:110px;margin:0 0 5px;"><button class="btn small" onclick="adminSaveAgentRank('${encodeURIComponent(fighter.callsign)}')">СОХРАНИТЬ</button></td>`
+            : `<td>${escapeHtml(e.displayRank || "Боец")}</td>`;
+        html += `<tr><td>${escapeHtml(e.callsign)}</td>${rankCell}<td>${escapeHtml(e.status)}</td><td>${escapeHtml(e.note)}</td>${isAdmin() && fighter ? "<td>Ранг без изменения прав</td>" : (isAdmin() ? "<td>—</td>" : "")}</tr>`;
+    });
     html += `</table>`;
     return html;
+}
+
+function adminSaveAgentRank(encodedCallsign) {
+    if (!isAdmin()) { alert("[ОТКАЗ] Менять ранг может только Одесса."); return; }
+    const callsign = decodeURIComponent(encodedCallsign);
+    const fighter = fighters.find(f => String(f.callsign).toUpperCase() === callsign.toUpperCase());
+    const input = document.getElementById("agentRank-" + encodedCallsign);
+    if (!fighter || !input) return;
+    const rank = input.value.trim();
+    if (!rank) { alert("Ранг не может быть пустым."); return; }
+    fighter.rank = rank.slice(0, 30);
+    save(STORAGE.fighters, fighters);
+    renderAgentsRefreshIfVisible();
+    alert(`Отображаемый ранг бойца ${fighter.callsign} сохранён. Права доступа не изменены.`);
 }
 
 function renderAgentsRefreshIfVisible() {

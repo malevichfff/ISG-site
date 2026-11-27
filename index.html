@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-30">
+<meta name="isg-build" content="2026-11-27-31">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -1077,7 +1077,7 @@ function renderMenu() {
     let html = "";
     // Вкладка «Доверенные» всегда располагается сразу после «Сталкеры»,
     // даже если в Firebase сохранён старый порядок вкладок.
-    const menuTabs = sortAlphabetically(tabs, tab => tab.label);
+    const menuTabs = [...tabs]; // Сохраняем исходный порядок вкладок в верхнем меню.
     const trustedTabIndex = menuTabs.findIndex(tab => tab.id === "trusted");
     if (trustedTabIndex >= 0) {
         const trustedTab = menuTabs.splice(trustedTabIndex, 1)[0];

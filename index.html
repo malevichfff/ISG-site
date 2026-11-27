@@ -2778,6 +2778,12 @@ async function refreshAIUsagePanel() {
         if (!response.ok || data.available !== true) {
             throw new Error(data.reason || data.error || ("HTTP " + response.status));
         }
+        if (data.trackingComplete !== true) {
+            panel.innerHTML = '<p class="text-danger">// НЕТ ПОЛНЫХ ДАННЫХ О РАСХОДЕ</p>' +
+                '<p style="font-size:12px;color:#ffb000;">Cloudflare не вернул значение usage.neurons для одного или нескольких запросов. Остаток не показываем, чтобы не вводить в заблуждение.</p>' +
+                '<p style="font-size:11px;color:#c0ffc0;">Неучтённых запросов: ' + (Number(data.untrackedCalls) || 0) + '. После полуночи UTC счётчик начнёт новый день.</p>';
+            return;
+        }
         const used = Number(data.usedNeurons) || 0;
         const remaining = Number(data.remainingNeurons);
         const limit = Number(data.dailyLimit) || 10000;

@@ -2866,12 +2866,11 @@ function renderAdmin() {
     const adminOnlySections = document.getElementById("adminOnlySections");
     if (adminOnlySections) adminOnlySections.style.display = isAdmin() ? "" : "none";
 
-    let fhtml = "<table style=\"font-size:12px;\"><tr><th>ПОЗЫВНОЙ</th><th>РАНГ</th><th>СТАТУС</th>" + (isSovet() ? "<th>УПРАВЛЕНИЕ</th>" : "") + "</tr>";
+    let fhtml = "<table style=\"font-size:12px;\"><tr><th>ПОЗЫВНОЙ</th><th>РАНГ</th><th>СТАТУС</th>" + (isAdmin() ? "<th>УПРАВЛЕНИЕ</th>" : "") + "</tr>";
     sortAlphabetically(fighters, f => f.callsign).forEach(f => {
         let controls = "";
-        if (isAdmin()) controls = '<button class="btn small" onclick="adminEditFighter(\'' + encodeURIComponent(f.callsign) + '\')">ИЗМЕНИТЬ</button> <button class="btn danger small" onclick="removeFighter(\'' + encodeURIComponent(f.callsign) + '\')">УДАЛИТЬ ПРОФИЛЬ</button>';
-        else if (currentRole() === "sovet") controls = '<button class="btn danger small" onclick="kickFighter(\'' + encodeURIComponent(f.callsign) + '\')">КИКНУТЬ</button>';
-        fhtml += "<tr><td>" + escapeHtml(f.callsign) + "</td><td>" + escapeHtml(fighterRankLabel(f.rank)) + "</td><td>" + escapeHtml(f.status) + "</td>" + (isSovet() ? "<td>" + controls + "</td>" : "") + "</tr>";
+        if (isAdmin()) controls = '<button class="btn small" onclick="adminEditFighter(\'' + encodeURIComponent(f.callsign) + '\')">ИЗМЕНИТЬ</button> <button class="btn small" onclick="adminEditDiscordId(\'' + encodeURIComponent(f.callsign) + '\')">DISCORD ID</button> <button class="btn danger small" onclick="removeFighter(\'' + encodeURIComponent(f.callsign) + '\')">УДАЛИТЬ ПРОФИЛЬ</button>';
+        fhtml += "<tr><td>" + escapeHtml(f.callsign) + "</td><td>" + escapeHtml(fighterRankLabel(f.rank)) + "</td><td>" + escapeHtml(f.status) + "</td>" + (isAdmin() ? "<td>" + controls + "</td>" : "") + "</tr>";
     });
     fhtml += "</table>";
     document.getElementById("adminFightersList").innerHTML = fhtml;
@@ -3057,6 +3056,22 @@ async function kickFighter(encodedCallsign) {
     renderAdmin();
     alert("Сеанс " + callsign + " завершён. Профиль сохранён.");
 }
+function adminEditDiscordId(encodedCallsign) {
+    if (!isAdmin()) { alert("[ОТКАЗ] Изменять Discord ID может только Одесса."); return; }
+    const callsign = decodeURIComponent(encodedCallsign);
+    const fighter = fighters.find(f => f.callsign === callsign);
+    if (!fighter) return;
+    const nextId = prompt("Discord ID для " + callsign + " (17–20 цифр). Оставьте пустым, чтобы очистить:", fighter.discordId || "");
+    if (nextId === null) return;
+    const discordId = nextId.trim();
+    if (discordId && !/^\\d{17,20}$/.test(discordId)) { alert("Discord ID должен содержать от 17 до 20 цифр."); return; }
+    if (discordId && fighters.some(f => f !== fighter && String(f.discordId || "") === discordId)) { alert("Этот Discord ID уже привязан к другому бойцу."); return; }
+    fighter.discordId = discordId;
+    save(STORAGE.fighters, fighters);
+    renderAdmin();
+    alert(discordId ? "Discord ID сохранён для " + callsign + "." : "Discord ID удалён из профиля " + callsign + ".");
+}
+
 function removeFighter(encodedCallsign) {
     if (!isAdmin()) { alert("[ОТКАЗ] Удалять профили может только Одесса."); return; }
     const callsign = decodeURIComponent(encodedCallsign);

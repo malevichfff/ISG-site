@@ -2401,7 +2401,7 @@ function clearBuyCalc() {
 }
 
 // ===== КАТЕГОРИИ ПРОДАЖИ =====
-const SELL_CATEGORIES = ["Одежда", "Медикаменты", "Оружие и магазины", "Детекторы и контейнеры", "Противогазы", "Глаза"];
+const SELL_CATEGORIES = ["Одежда", "Медикаменты", "Оружие и магазины", "Детекторы и контейнеры", "Противогазы", "Глаза", "Другое"];
 function normalizeSellCategory(entry) {
     const source = String((entry.group || "") + " " + (entry.item || "")).toLocaleLowerCase("ru");
     let category = "";

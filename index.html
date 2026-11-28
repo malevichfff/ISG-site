@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-28-34">
+<meta name="isg-build" content="2026-11-28-35">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -2445,9 +2445,9 @@ function renderSell() {
                 <span class="group-toggle">${isCollapsed?'+':'−'}</span>
             </div>
             <div class="group-content ${isCollapsed?'collapsed':''}" id="content_${groupId}">
-            <table><tr><th>ТОВАР / УСЛУГА</th><th>ЦЕНА</th>${actions?'<th>ДЕЙСТВИЕ</th>':''}</tr>`;
+            <table><tr><th>ТОВАР / УСЛУГА</th><th>ЦЕНА</th><th>КАЛЬКУЛЯТОР</th>${actions?'<th>ДЕЙСТВИЕ</th>':''}</tr>`;
             sortAlphabetically(groups[groupName], item => item.item).forEach(s => {
-                html += `<tr class="catalog-row" data-search="${escapeHtml((s.item+' '+(s.group||'')).toLowerCase())}"><td>${escapeHtml(s.item)}</td><td>${escapeHtml(s.price)}</td>${actions?`<td><button class="btn warn small" onclick="event.stopPropagation();editSell(${s.id})">✎</button> <button class="btn danger small" onclick="event.stopPropagation();deleteSell(${s.id})">×</button></td>`:''}</tr>`;
+                html += `<tr class="catalog-row" data-search="${escapeHtml((s.item+' '+(s.group||'')).toLowerCase())}"><td>${escapeHtml(s.item)}</td><td>${escapeHtml(s.price)}</td><td><button class="btn small" onclick="event.stopPropagation();addSellToCalculator(${Number(s.id)})">+ В КАЛЬКУЛЯТОР</button></td>${actions?`<td><button class="btn warn small" onclick="event.stopPropagation();editSell(${s.id})">✎</button> <button class="btn danger small" onclick="event.stopPropagation();deleteSell(${s.id})">×</button></td>`:''}</tr>`;
             });
             html += `</table></div>`;
         });
@@ -2528,7 +2528,7 @@ function renderSellCalculator() {
 
 let sellCalcCounter = 0;
 
-function addSellCalcItem() {
+function addSellCalcItem(productId = null) {
     sellCalcCounter++;
     const container = document.getElementById("sellCalcItems");
     if (!container) return;
@@ -2543,7 +2543,17 @@ function addSellCalcItem() {
         <div class="item-price">0 руб.</div>
         <button class="btn danger small" onclick="removeSellCalcItem(${sellCalcCounter})">×</button>`;
     container.appendChild(div);
+    if (productId !== null) div.querySelector("select").value = String(productId);
     updateSellCalc();
+}
+
+function addSellToCalculator(productId) {
+    const product = sell.find(item => Number(item.id) === Number(productId));
+    if (!product) { alert("Товар не найден в каталоге продажи."); return; }
+    if (collapsedGroups["sell_calculator"]) toggleGroup("sell_calculator");
+    addSellCalcItem(product.id);
+    const calculator = document.getElementById("content_sell_calculator");
+    if (calculator) calculator.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function removeSellCalcItem(id) {

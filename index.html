@@ -2443,7 +2443,7 @@ function renderSell() {
         });
     }
 
-    if (isAdmin()) {
+    if (!isGuest()) {
         const addSellCollapsed = collapsedGroups["sell_add_form"] === true;
         html += `<div class="group-header ${addSellCollapsed?'is-collapsed':''}" onclick="toggleGroup('sell_add_form')" data-group-id="sell_add_form"><span class="group-title">ДОБАВИТЬ ПОЗИЦИЮ</span><span class="group-toggle">${addSellCollapsed?'+':'−'}</span></div><div class="group-content ${addSellCollapsed?'collapsed':''}" id="content_sell_add_form"><div class="form-block mt-10"><form onsubmit="addSell(event)">
         <div class="row">
@@ -2571,9 +2571,16 @@ function clearSellCalc() {
 
 function addSell(e) {
     e.preventDefault();
-    if (!isAdmin()) { alert("Добавлять позиции может только Одесса."); return; }
-    const newId = sell.length ? Math.max(...sell.map(x=>x.id))+1 : 1;
-    sell.push({ id: newId, item: document.getElementById("sellItem").value.trim(), price: document.getElementById("sellPrice").value.trim(), group: document.getElementById("sellGroup").value.trim() });
+    if (isGuest()) { alert("Чтобы добавить товар, войдите в аккаунт."); return; }
+    const item = document.getElementById("sellItem").value.trim();
+    const price = document.getElementById("sellPrice").value.trim();
+    const group = document.getElementById("sellGroup").value.trim();
+    if (!item || !price || !SELL_CATEGORIES.includes(group)) {
+        alert("Заполните название, цену и выберите категорию.");
+        return;
+    }
+    const newId = sell.length ? Math.max(...sell.map(x=>Number(x.id)||0))+1 : 1;
+    sell.push({ id: newId, item, price, group, addedBy: session.callsign, addedAt: new Date().toISOString() });
     save(STORAGE.sell, sell); renderContent();
 }
 

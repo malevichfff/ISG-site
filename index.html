@@ -3125,7 +3125,7 @@ function adminEditDiscordId(encodedCallsign) {
     const nextId = prompt("Discord ID для " + callsign + " (17–20 цифр). Оставьте пустым, чтобы очистить:", fighter.discordId || "");
     if (nextId === null) return;
     const discordId = nextId.trim();
-    if (discordId && !/^\\d{17,20}$/.test(discordId)) { alert("Discord ID должен содержать от 17 до 20 цифр."); return; }
+    if (discordId && !/^\d{17,20}$/.test(discordId)) { alert("Discord ID должен содержать от 17 до 20 цифр."); return; }
     if (discordId && fighters.some(f => f !== fighter && String(f.discordId || "") === discordId)) { alert("Этот Discord ID уже привязан к другому бойцу."); return; }
     fighter.discordId = discordId;
     save(STORAGE.fighters, fighters);

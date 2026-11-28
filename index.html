@@ -2927,11 +2927,11 @@ function renderAdmin() {
     const adminOnlySections = document.getElementById("adminOnlySections");
     if (adminOnlySections) adminOnlySections.style.display = isAdmin() ? "" : "none";
 
-    let fhtml = "<table style=\"font-size:12px;\"><tr><th>ПОЗЫВНОЙ</th><th>РАНГ</th><th>СТАТУС</th>" + (isAdmin() ? "<th>УПРАВЛЕНИЕ</th>" : "") + "</tr>";
+    let fhtml = "<table style=\"font-size:12px;\"><tr><th>ПОЗЫВНОЙ</th><th>РАНГ</th><th>СТАТУС</th>" + (isAdmin() ? "<th>DISCORD ID</th><th>УПРАВЛЕНИЕ</th>" : "") + "</tr>";
     sortAlphabetically(fighters, f => f.callsign).forEach(f => {
         let controls = "";
-        if (isAdmin()) controls = '<button class="btn small" onclick="adminEditFighter(\'' + encodeURIComponent(f.callsign) + '\')">ИЗМЕНИТЬ</button> <button class="btn small" onclick="adminEditDiscordId(\'' + encodeURIComponent(f.callsign) + '\')">DISCORD ID</button> <button class="btn danger small" onclick="removeFighter(\'' + encodeURIComponent(f.callsign) + '\')">УДАЛИТЬ ПРОФИЛЬ</button>';
-        fhtml += "<tr><td>" + escapeHtml(f.callsign) + "</td><td>" + escapeHtml(fighterRankLabel(f.rank)) + "</td><td>" + escapeHtml(f.status) + "</td>" + (isAdmin() ? "<td>" + controls + "</td>" : "") + "</tr>";
+        if (isAdmin()) controls = '<button class="btn small" onclick="adminEditFighter(\'' + encodeURIComponent(f.callsign) + '\')">ИЗМЕНИТЬ</button> <button class="btn small" onclick="adminEditDiscordId(\'' + encodeURIComponent(f.callsign) + '\')">ИЗМЕНИТЬ ID</button> <button class="btn danger small" onclick="removeFighter(\'' + encodeURIComponent(f.callsign) + '\')">УДАЛИТЬ ПРОФИЛЬ</button>';
+        fhtml += "<tr><td>" + escapeHtml(f.callsign) + "</td><td>" + escapeHtml(fighterRankLabel(f.rank)) + "</td><td>" + escapeHtml(f.status) + "</td>" + (isAdmin() ? '<td style="white-space:nowrap;user-select:all;">' + escapeHtml(f.discordId || "НЕ УКАЗАН") + "</td><td>" + controls + "</td>" : "") + "</tr>";
     });
     fhtml += "</table>";
     document.getElementById("adminFightersList").innerHTML = fhtml;

@@ -619,7 +619,7 @@ tr:hover td { background: rgba(0,255,65,0.05); }
 
 const SOVET_CALLSIGN = "СОВЕТ";
 const ADMIN_CALLSIGN = "ADMIN";
-const ADMIN_PASS = "@gp21438903";
+const ADMIN_FIREBASE_EMAIL = "gedos6876@gmail.com";
 let councilAccount = { callsign: SOVET_CALLSIGN, password: "admin", version: 1 };
 let agentServiceRanks = { admin: "Администратор" };
 let agentDisplayRoles = { admin: "Одесса", council: "Совет" };
@@ -842,7 +842,17 @@ async function initFirebase() {
     try {
         setConnectionStatus("ПОДКЛЮЧЕНИЕ…", "connecting");
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-        await firebase.auth().signInAnonymously();
+        const auth = firebase.auth();
+        if (auth.currentUser && String(auth.currentUser.email || "").toLowerCase() === ADMIN_FIREBASE_EMAIL.toLowerCase()) {
+            session = { callsign: ADMIN_CALLSIGN, role: "admin", authVersion: 1 };
+            save(STORAGE.session, session);
+        } else {
+            if (session?.role === "admin") {
+                session = null;
+                localStorage.removeItem(STORAGE.session);
+            }
+            if (!auth.currentUser) await auth.signInAnonymously();
+        }
         db = firebase.database();
         db.ref(`${ROOT_PATH}/settings/customRoles`).on("value", snapshot => {
             customRoles = normalizeList(snapshot.val()).map(x => String(x || "").trim()).filter(Boolean);
@@ -996,12 +1006,21 @@ function roleLevel(r) { return ROLE_LEVEL[r] ?? 0; }
 function isGuest() { return !session; }
 function isSovet() { return currentRole() === "sovet" || currentRole() === "admin"; }
 function isAdmin() { return currentRole() === "admin"; }
-function forceLogout(message) {
+async function forceLogout(message) {
     session = null;
     localStorage.removeItem(STORAGE.session);
     if (councilPresenceRef) councilPresenceRef.remove().catch(() => {});
     activeTab = "home";
     renderAll();
+    try {
+        const auth = firebase.auth();
+        if (auth.currentUser && auth.currentUser.email) {
+            await auth.signOut();
+            await auth.signInAnonymously();
+        }
+    } catch (error) {
+        console.warn("Firebase forced logout:", error);
+    }
     alert("[СЕАНС ЗАВЕРШЁН] " + message);
 }
 function fighterRankLabel(rank) { return String(rank || "Боец"); }
@@ -1075,15 +1094,42 @@ function reviewApplication(id, approve) {
     alert(approve ? `[СИСТЕМА] Заявка ${application.callsign} одобрена.` : `[СИСТЕМА] Заявка ${application.callsign} отклонена.`);
 }
 
-function handleLogin(e) {
+async function handleLogin(e) {
     e.preventDefault();
     const callsign = document.getElementById("loginCallsign").value.trim().toUpperCase();
     const pass = document.getElementById("loginPass").value;
-    if (callsign === ADMIN_CALLSIGN && pass === ADMIN_PASS) {
-        session = { callsign: ADMIN_CALLSIGN, role: "admin", authVersion: 1 };
-        save(STORAGE.session, session);
-        closeModal("loginModal"); renderAll(); return;
+
+    if (callsign === ADMIN_CALLSIGN) {
+        try {
+            const credential = await firebase.auth().signInWithEmailAndPassword(ADMIN_FIREBASE_EMAIL, pass);
+            if (!credential.user || String(credential.user.email || "").toLowerCase() !== ADMIN_FIREBASE_EMAIL.toLowerCase()) {
+                await firebase.auth().signOut();
+                throw new Error("Не удалось подтвердить аккаунт администратора.");
+            }
+            session = { callsign: ADMIN_CALLSIGN, role: "admin", authVersion: 1 };
+            save(STORAGE.session, session);
+            closeModal("loginModal");
+            renderAll();
+        } catch (error) {
+            console.error("Admin Firebase login:", error);
+            alert("[ОШИБКА ВХОДА] Не удалось войти как Одесса. Проверьте пароль Firebase Authentication.");
+        }
+        return;
     }
+
+    // Если перед обычным входом в браузере оставалась администраторская авторизация,
+    // возвращаем анонимную Firebase-сессию.
+    const auth = firebase.auth();
+    if (auth.currentUser && auth.currentUser.email) {
+        try {
+            await auth.signOut();
+            await auth.signInAnonymously();
+        } catch (error) {
+            alert("[FIREBASE] Не удалось переключить авторизацию: " + (error.message || error));
+            return;
+        }
+    }
+
     // Для роли Совета проверяется только общий пароль. Позывной пользователь выбирает сам.
     if (pass === councilAccount.password) {
         if (!callsign) { alert("[ОШИБКА] Придумайте логин для входа в Совет."); return; }
@@ -1099,7 +1145,22 @@ function handleLogin(e) {
     renderAll();
 }
 
-function logout() { session = null; localStorage.removeItem(STORAGE.session); updateCouncilPresence(); activeTab = "home"; renderAll(); }
+async function logout() {
+    session = null;
+    localStorage.removeItem(STORAGE.session);
+    updateCouncilPresence();
+    activeTab = "home";
+    renderAll();
+    try {
+        const auth = firebase.auth();
+        if (auth.currentUser && auth.currentUser.email) {
+            await auth.signOut();
+            await auth.signInAnonymously();
+        }
+    } catch (error) {
+        console.warn("Firebase logout:", error);
+    }
+}
 function openLogin() { document.getElementById("loginCallsign").value = ""; document.getElementById("loginPass").value = ""; openModal("loginModal"); }
 function openModal(id) { document.getElementById(id).classList.add("open"); }
 function closeModal(id) { document.getElementById(id).classList.remove("open"); }
@@ -3072,12 +3133,52 @@ function adminEditDiscordId(encodedCallsign) {
     alert(discordId ? "Discord ID сохранён для " + callsign + "." : "Discord ID удалён из профиля " + callsign + ".");
 }
 
-function removeFighter(encodedCallsign) {
+async function removeFighter(encodedCallsign) {
     if (!isAdmin()) { alert("[ОТКАЗ] Удалять профили может только Одесса."); return; }
     const callsign = decodeURIComponent(encodedCallsign);
-    if (!confirm(`Кикнуть ${callsign} и безвозвратно удалить профиль?`)) return;
-    fighters = fighters.filter(f => f.callsign !== callsign);
-    save(STORAGE.fighters, fighters); renderAdmin();
+    const fighter = fighters.find(f => f.callsign === callsign);
+    if (!fighter) { alert("Профиль не найден."); return; }
+    const discordId = String(fighter.discordId || "").trim();
+    if (!/^\d{17,20}$/.test(discordId)) {
+        alert("[ОТКАЗ] У этого бойца не указан корректный Discord ID. Сначала добавьте Discord ID в профиль, затем повторите удаление.");
+        return;
+    }
+    if (!confirm(`Кикнуть ${callsign} с Discord-сервера и безвозвратно удалить профиль с сайта?`)) return;
+
+    const currentUser = firebase.auth().currentUser;
+    if (!currentUser || String(currentUser.email || "").toLowerCase() !== ADMIN_FIREBASE_EMAIL.toLowerCase()) {
+        alert("[ОТКАЗ] Нет подтверждённой Firebase-сессии администратора. Выйдите и войдите в ADMIN заново.");
+        return;
+    }
+
+    try {
+        const idToken = await currentUser.getIdToken(true);
+        const response = await fetch("https://isg-discord-bridge.gedos6876.workers.dev/kick", {
+            method: "POST",
+            headers: {
+                "Authorization": "Bearer " + idToken,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ discordId })
+        });
+        let result = {};
+        try { result = await response.json(); } catch (_) {}
+        if (!response.ok || result.success !== true) {
+            throw new Error(result.error || ("Discord вернул HTTP " + response.status));
+        }
+
+        // Удаляем запись в Firebase только после успешного кика (или если участник уже отсутствует).
+        const nextFighters = fighters.filter(f => f.callsign !== callsign);
+        await db.ref(`${ROOT_PATH}/${STORAGE.fighters}`).set(nextFighters);
+        fighters = nextFighters;
+        renderAdmin();
+        alert(result.alreadyAbsent
+            ? `Профиль ${callsign} удалён. Пользователь уже отсутствовал на Discord-сервере.`
+            : `Пользователь ${callsign} исключён с Discord-сервера, профиль удалён.`);
+    } catch (error) {
+        console.error("Fighter removal / Discord kick:", error);
+        alert("[ОШИБКА] Не удалось выполнить кик или удалить профиль. Профиль на сайте оставлен. Подробности: " + (error.message || error));
+    }
 }
 
 function adminEditFighter(encodedCallsign) {

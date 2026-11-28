@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-27-33">
+<meta name="isg-build" content="2026-11-28-34">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -2314,6 +2314,11 @@ function renderBuyCalculator() {
     <h3>[ КАЛЬКУЛЯТОР ]</h3>
     <p class="text-warn" style="font-size:12px;margin-bottom:15px;">// Выберите позиции и укажите количество. Комиссия ISG вычитается из суммы.</p>
     <div id="buyCalcItems"></div>
+    <div style="margin:12px 0;">
+        <label for="buyCalcAmount">СУММА (РУБ.):</label>
+        <input type="number" id="buyCalcAmount" min="0" step="0.01" value="" placeholder="Введите сумму для расчёта" oninput="updateBuyCalc()" onchange="updateBuyCalc()">
+        <p style="font-size:11px;color:#ffb000;">// Если сумма указана вручную, комиссия и итог рассчитываются от неё. Если поле пустое — сумма берётся из выбранных товаров.</p>
+    </div>
     <div class="calc-percent-row">
         <label style="flex-shrink:0;">КОМИССИЯ ISG (%):</label>
         <input type="number" id="buyCalcPercent" min="0" max="100" step="0.1" value="0" onchange="updateBuyCalc()" oninput="updateBuyCalc()">
@@ -2369,14 +2374,17 @@ function updateBuyCalc() {
         priceDiv.textContent = `${itemTotal} руб.`;
         subtotal += itemTotal;
     });
+    const amountInput = document.getElementById("buyCalcAmount");
+    const manualAmount = amountInput && amountInput.value.trim() !== "" ? Math.max(0, parseFloat(amountInput.value) || 0) : null;
+    const calculationBase = manualAmount !== null ? manualAmount : subtotal;
     const percentInput = document.getElementById("buyCalcPercent");
-    const percent = parseFloat(percentInput ? percentInput.value : 0) || 0;
-    const commission = subtotal * percent / 100;
-    const payout = subtotal - commission;
+    const percent = Math.min(100, Math.max(0, parseFloat(percentInput ? percentInput.value : 0) || 0));
+    const commission = calculationBase * percent / 100;
+    const payout = calculationBase - commission;
     const totalDiv = document.getElementById("buyCalcTotal");
     if (totalDiv) {
         totalDiv.innerHTML = `
-            <div class="total-line"><span>СУММА:</span><span>${subtotal} руб.</span></div>
+            <div class="total-line"><span>СУММА:</span><span>${calculationBase.toFixed(2)} руб.</span></div>
             <div class="total-line sub"><span>КОМИССИЯ (${percent}%):</span><span>−${commission.toFixed(2)} руб.</span></div>
             <div class="total-line final"><span>К ВЫПЛАТЕ:</span><span>${payout.toFixed(2)} руб.</span></div>`;
     }
@@ -2387,6 +2395,8 @@ function clearBuyCalc() {
     if (container) container.innerHTML = "";
     const percentInput = document.getElementById("buyCalcPercent");
     if (percentInput) percentInput.value = 0;
+    const amountInput = document.getElementById("buyCalcAmount");
+    if (amountInput) amountInput.value = "";
     updateBuyCalc();
 }
 

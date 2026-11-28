@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="isg-build" content="2026-11-28-35">
+<meta name="isg-build" content="2026-11-28-36">
 <title>ISG — International Scientific Group</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -2518,8 +2518,15 @@ function renderSellCalculator() {
     <p class="text-warn" style="font-size:12px;margin-bottom:15px;">// Выберите товары и укажите количество.</p>
     <div id="sellCalcItems"></div>
     <button class="btn small" onclick="addSellCalcItem()" style="margin-bottom:15px;">+ ДОБАВИТЬ ПОЗИЦИЮ</button>
+    <div class="calc-percent-row" style="border-color:#00ff41;background:rgba(0,255,65,0.03);">
+        <label for="sellTrustedToggle" style="cursor:pointer;">ДОВЕРЕННЫЕ:</label>
+        <input type="checkbox" id="sellTrustedToggle" onchange="updateSellCalc()" style="width:20px;height:20px;margin:0;accent-color:#00ff41;cursor:pointer;">
+        <span class="percent-info" style="color:#00ff41;">// При включении скидка 20%</span>
+    </div>
     <div class="calc-total" id="sellCalcTotal">
-        <div class="total-line final"><span>ИТОГО К ОПЛАТЕ:</span><span>0 руб.</span></div>
+        <div class="total-line"><span>СУММА:</span><span>0.00 руб.</span></div>
+        <div class="total-line sub"><span>СКИДКА (0%):</span><span>−0.00 руб.</span></div>
+        <div class="total-line final"><span>ИТОГО К ОПЛАТЕ:</span><span>0.00 руб.</span></div>
     </div>
     <button class="btn danger small" onclick="clearSellCalc()" style="margin-top:10px;">ОЧИСТИТЬ</button>
 </div></div>`;
@@ -2573,13 +2580,22 @@ function updateSellCalc() {
         const qty = parseInt(qtyInput.value) || 0;
         const price = parseFloat(priceText.replace(/[^0-9.]/g, '')) || 0;
         const itemTotal = price * qty;
-        priceDiv.textContent = `${itemTotal} руб.`;
+        priceDiv.textContent = `${itemTotal.toFixed(2)} руб.`;
         subtotal += itemTotal;
     });
+
+    const trustedToggle = document.getElementById("sellTrustedToggle");
+    const isTrusted = Boolean(trustedToggle && trustedToggle.checked);
+    const discountPercent = isTrusted ? 20 : 0;
+    const discount = subtotal * discountPercent / 100;
+    const total = subtotal - discount;
+
     const totalDiv = document.getElementById("sellCalcTotal");
     if (totalDiv) {
         totalDiv.innerHTML = `
-            <div class="total-line final"><span>ИТОГО К ОПЛАТЕ:</span><span>${subtotal.toFixed(2)} руб.</span></div>`;
+            <div class="total-line"><span>СУММА:</span><span>${subtotal.toFixed(2)} руб.</span></div>
+            <div class="total-line sub"><span>СКИДКА (${discountPercent}%):</span><span>−${discount.toFixed(2)} руб.</span></div>
+            <div class="total-line final"><span>ИТОГО К ОПЛАТЕ:</span><span>${total.toFixed(2)} руб.</span></div>`;
     }
 }
 

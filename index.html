@@ -496,6 +496,8 @@ tr:hover td { background: rgba(0,255,65,0.05); }
         <form onsubmit="submitApplication(event)">
             <label>ЖЕЛАЕМЫЙ ПОЗЫВНОЙ:</label>
             <input type="text" id="applyCallsign" required maxlength="20" autocomplete="off">
+            <label>DISCORD ID (17–20 ЦИФР):</label>
+            <input type="text" id="applyDiscordId" required inputmode="numeric" pattern="[0-9]{17,20}" minlength="17" maxlength="20" placeholder="Например: 123456789012345678" autocomplete="off">
             <label>ПАРОЛЬ:</label>
             <input type="password" id="applyPass" required minlength="4" maxlength="64" autocomplete="new-password">
             <label>ПОВТОРИТЕ ПАРОЛЬ:</label>
@@ -523,6 +525,7 @@ tr:hover td { background: rgba(0,255,65,0.05); }
                 <div style="flex:1;min-width:150px;"><label>ПОЗЫВНОЙ:</label><input type="text" id="fighterCallsign" required autocomplete="off"></div>
                 <div style="flex:1;min-width:150px;"><label>ПАРОЛЬ:</label><input type="text" id="fighterPass" required autocomplete="off"></div>
             </div>
+            <label>DISCORD ID:</label><input type="text" id="fighterDiscordId" required inputmode="numeric" pattern="[0-9]{17,20}" minlength="17" maxlength="20" placeholder="17–20 цифр" autocomplete="off">
             <div class="row">
                 <div style="flex:1;min-width:120px;"><label>РАНГ:</label><select id="fighterRank"><option value="Боец">Боец</option></select></div>
                 <div style="flex:1;min-width:120px;"><label>СТАТУС:</label><select id="fighterStatus"><option>АКТИВЕН</option><option>НА ЗАДАНИИ</option><option>СКРЫТ</option><option>АРХИВ</option></select></div>
@@ -1022,7 +1025,16 @@ function submitApplication(e) {
     e.preventDefault();
     const callsign = document.getElementById("applyCallsign").value.trim().toUpperCase();
     const password = document.getElementById("applyPass").value;
+    const discordId = document.getElementById("applyDiscordId").value.trim();
     const confirmPassword = document.getElementById("applyPassConfirm").value;
+    if (!/^\d{17,20}$/.test(discordId)) {
+        alert("[ОШИБКА] Введите корректный Discord ID: от 17 до 20 цифр.");
+        return;
+    }
+    if (fighters.some(f => String(f.discordId || "") === discordId) || applications.some(a => String(a.discordId || "") === discordId)) {
+        alert("[ОШИБКА] Этот Discord ID уже привязан к существующему бойцу или заявке.");
+        return;
+    }
     if (!/^[А-ЯЁA-Z0-9_-]{2,20}$/i.test(callsign)) {
         alert("[ОШИБКА] Позывной: 2–20 символов, только буквы, цифры, дефис и подчёркивание.");
         return;
@@ -1039,7 +1051,7 @@ function submitApplication(e) {
         alert("[ОШИБКА] Заявка с таким позывным уже ожидает рассмотрения.");
         return;
     }
-    applications.push({ id: Date.now(), callsign, password, submittedAt: new Date().toISOString() });
+    applications.push({ id: Date.now(), callsign, password, discordId, submittedAt: new Date().toISOString() });
     save(STORAGE.applications, applications);
     e.target.reset();
     alert("[СИСТЕМА] Заявка отправлена Высшему Совету. Дождитесь решения.");
@@ -1054,7 +1066,7 @@ function reviewApplication(id, approve) {
             alert("[ОШИБКА] Позывной уже зарегистрирован.");
             return;
         }
-        fighters.push({ callsign: application.callsign, password: application.password, rank: "Боец", status: "АКТИВЕН", note: "Регистрация одобрена Советом." });
+        fighters.push({ callsign: application.callsign, password: application.password, discordId: application.discordId || "", rank: "Боец", status: "АКТИВЕН", note: "Регистрация одобрена Советом." });
         save(STORAGE.fighters, fighters);
     }
     applications = applications.filter(a => Number(a.id) !== Number(id));
@@ -2843,10 +2855,10 @@ function renderAdmin() {
     let ahtml = "";
     if (!applications.length) ahtml = `<p class="text-warn">// Нет ожидающих заявок</p>`;
     else {
-        ahtml = `<table style="font-size:12px;"><tr><th>ПОЗЫВНОЙ</th><th>ДАТА</th><th>РЕШЕНИЕ</th></tr>`;
+        ahtml = `<table style="font-size:12px;"><tr><th>ПОЗЫВНОЙ</th><th>DISCORD ID</th><th>ДАТА</th><th>РЕШЕНИЕ</th></tr>`;
         sortAlphabetically(applications, a => a.callsign).forEach(a => {
             const date = a.submittedAt ? new Date(a.submittedAt).toLocaleString("ru-RU") : "—";
-            ahtml += `<tr><td>${escapeHtml(a.callsign)}</td><td>${escapeHtml(date)}</td><td><button class="btn small" onclick="reviewApplication(${Number(a.id)},true)">✓ ДОПУСТИТЬ</button> <button class="btn danger small" onclick="reviewApplication(${Number(a.id)},false)">× ОТКЛОНИТЬ</button></td></tr>`;
+            ahtml += `<tr><td>${escapeHtml(a.callsign)}</td><td>${escapeHtml(a.discordId || "—")}</td><td>${escapeHtml(date)}</td><td><button class="btn small" onclick="reviewApplication(${Number(a.id)},true)">✓ ДОПУСТИТЬ</button> <button class="btn danger small" onclick="reviewApplication(${Number(a.id)},false)">× ОТКЛОНИТЬ</button></td></tr>`;
         });
         ahtml += `</table>`;
     }
@@ -3021,12 +3033,15 @@ function registerFighter(e) {
     if (!isSovet()) return;
     const callsign = document.getElementById("fighterCallsign").value.trim().toUpperCase();
     const password = document.getElementById("fighterPass").value;
+    const discordId = document.getElementById("fighterDiscordId").value.trim();
     const rank = document.getElementById("fighterRank").value;
+    if (!/^\d{17,20}$/.test(discordId)) { alert("[ОШИБКА] Введите корректный Discord ID: от 17 до 20 цифр."); return; }
+    if (fighters.some(f => String(f.discordId || "") === discordId)) { alert("[ОШИБКА] Этот Discord ID уже привязан к бойцу."); return; }
     const status = document.getElementById("fighterStatus").value;
     const note = document.getElementById("fighterNote").value.trim();
     if (fighters.some(f => f.callsign === callsign)) { alert("[ОШИБКА] Уже зарегистрирован."); return; }
     if (callsign === String(councilAccount.callsign || SOVET_CALLSIGN).toUpperCase() || callsign === ADMIN_CALLSIGN) { alert("[ОШИБКА] Позывной зарезервирован."); return; }
-    fighters.push({ callsign, password, rank, role: "Боец", status, note });
+    fighters.push({ callsign, password, discordId, rank, role: "Боец", status, note });
     save(STORAGE.fighters, fighters); e.target.reset(); renderAdmin();
     alert(`[СИСТЕМА] Боец "${callsign}" зарегистрирован. Пароль: ${password}`);
 }
